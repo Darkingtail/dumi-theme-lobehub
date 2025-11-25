@@ -1,0 +1,59 @@
+// Optional dependencies to ignore (used by consolidate.js and @vue/component-compiler-utils)
+const optionalDeps = [
+  'velocityjs',
+  'dustjs-linkedin',
+  'atpl',
+  'liquor',
+  'twig',
+  'ejs',
+  'eco',
+  'jazz',
+  'jqtpl',
+  'hamljs',
+  'hamlet',
+  'whiskers',
+  'haml-coffee',
+  'hogan.js',
+  'templayed',
+  'underscore',
+  'walrus',
+  'mustache',
+  'just',
+  'ect',
+  'mote',
+  'toffee',
+  'dot',
+  'bracket-template',
+  'ractive',
+  'htmling',
+  'babel-core',
+  'plates',
+  'vash',
+  'slm',
+  'marko',
+  'teacup/lib/express',
+  'coffee-script',
+  'stylus',
+  'less',
+  'sass',
+  'node-sass',
+];
+
+export default {
+  chainWebpack(config: any) {
+    // Ignore optional dependencies that webpack can't resolve
+    config.resolve.fallback.merge(
+      optionalDeps.reduce((acc: any, dep: string) => {
+        acc[dep] = false;
+        return acc;
+      }, {}),
+    );
+  },
+  mfsu: false,
+  presets: [require.resolve('@dumijs/preset-vue2')],
+  themeConfig: {
+    name: 'Vue 2 Demo',
+    nav: [{ link: '/components', title: 'Components' }],
+  },
+  vue2: {},
+};

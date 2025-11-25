@@ -1,0 +1,17 @@
+{
+  "name": "vue2-example",
+  "private": true,
+  "scripts": {
+    "build": "dumi build",
+    "dev": "dumi dev"
+  },
+  "devDependencies": {
+    "@dumijs/preset-vue2": "workspace:*",
+    "@vue/babel-helper-vue-jsx-merge-props": "^1.4.0",
+    "@vue/component-compiler-utils": "^3.3.0",
+    "dumi": "^2.4.17",
+    "element-ui": "^2.15.14",
+    "vue": "^2.7.16",
+    "vue-template-compiler": "^2.7.16"
+  }
+}

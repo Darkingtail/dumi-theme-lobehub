@@ -1,0 +1,3085 @@
+
+╭─── Claude Code v2.0.53 ──────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting        │
+│                Welcome back sansan!                │ started                 │
+│                                                    │ Run /init to create a … │
+│                      ▗ ▗   ▖ ▖                     │ ─────────────────────── │
+│                                                    │ Recent activity         │
+│                        ▘▘ ▝▝                       │ No recent activity      │
+│                                                    │                         │
+│               Opus 4.5 · Claude Max                │                         │
+│ ~/…/GitHub/dumi-theme-lobehub/packages/preset-vue2 │                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+══════════════════ Conversation compacted · ctrl+o for history ═════════════════
+
+⏺ I'll rebuild the preset-vue2 package to apply the Vue.extend() constructor
+   fix. Let me run the build command:
+
+⏺ Bash(pnpm build:lib)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build:lib /Users/wisedu/Documents/GitHub/du
+    mi-theme-lobehub/packages/preset-vue2
+    > tsup --minify
+    … +39 lines (ctrl+o to expand)
+
+
+⏺ Build completed successfully. Let me verify the fix is in the compiled
+  output:
+
+⏺ Read(lib/compiler.mjs)
+  ⎿  Read 14 lines
+
+⏺ The Vue.extend() fix is included in the compiled output. I can see the key
+   fix on line 2:
+
+  var ${s} = typeof ${s}_raw === 'function' && ${s}_raw.options ?
+  ${s}_raw.options : ${s}_raw;
+
+  This extracts the .options object from Vue.extend() constructor,
+  preventing React from calling it as a state updater function.
+
+  Let me kill any existing dev servers and start fresh in vue2-example:
+
+⏺ Bash(pkill -f "dumi" 2>/dev/null || true; pkill -f "umi" 2>/dev/null || true;
+      sleep 2)
+  ⎿  (No content)
+
+⏺ The package has been rebuilt with the Vue.extend() fix.
+
+  Summary of the fix:
+
+  The issue was that Vue.extend() returns a constructor function, and when
+  React's setComponent(component) receives a function, it treats it as a
+  state updater and calls it. This caused Vue's constructor to be invoked
+  without new, leading to this being undefined and the _init error.
+
+  The fix:
+  // Before: directly used the export
+  const __sfc__ = Vue.extend({...})
+
+  // After: extract options from constructor
+  const __sfc___raw = Vue.extend({...})
+  var __sfc__ = typeof __sfc___raw === 'function' && __sfc___raw.options
+    ? __sfc___raw.options  // Extract plain options object
+    : __sfc___raw;         // Use directly if already an object
+
+  To test:
+  1. Restart the dev server in vue2-example:
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+  2. Open http://localhost:8000/vue2 in browser
+  3. Try editing the Vue 2 demo code - live editing should now work without
+  the _init error
+
+> [Vue2 Compiler] Babel standalone is not loaded,ReferenceError: Babel is 
+not defined 
+
+⏺ The error shows that @babel/standalone isn't being loaded before the
+  compiler. Let me check the preflight file which should load Babel:
+
+⏺ Read(src/vue2/runtime/preflight.ts)
+  ⎿  Read 31 lines
+
+⏺ The preflight doesn't load Babel. I need to check how the techStack
+  configuration handles script loading:
+
+⏺ Read(src/vue2/techStack.ts)
+  ⎿  Error reading file
+
+⏺ Search(pattern: "**/techStack*.ts", path:
+        "~/Documents/GitHub/dumi-theme-lobehub/packages/preset-vue2")
+  ⎿  Found 0 files 
+
+⏺ Search(pattern: "**/*.ts", path: "src")
+  ⎿  Found 17 files (ctrl+o to expand)
+
+⏺ Read(src/vue2/techStack/index.ts)
+  ⎿  Read 75 lines
+
+⏺ Found the issue! The Babel script is loaded with async: true (line 49),
+  which means it loads asynchronously and the compiler runs before Babel is
+  available.
+
+  Let me fix this by removing async: true:
+
+⏺ Update(src/vue2/techStack/index.ts)
+  ⎿  Updated src/vue2/techStack/index.ts with 1 addition and 1 removal
+       41      };
+       42    
+       43      // Mark @babel/standalone as external
+       44 +    // NOTE: Do NOT use async: true - Babel must be loaded 
+          + before compiler runs
+       45      api.addHTMLHeadScripts(() => {
+       46        return [
+       47          {
+       48            src: vue2Config?.compiler?.babelStandaloneCDN || 
+            BABEL_STANDALONE_CDN,
+       49 -          async: true,
+       49          },
+       50        ];
+       51      });
+
+⏺ Actually, the compiler creates itself at module load time, which might
+  still run before the head script finishes. Let me make the compiler
+  lazy-initialized so it only creates the Babel wrapper when compile() is
+  actually called:
+
+⏺ Read(src/compiler/browser.ts)
+  ⎿  Read 83 lines
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 27 additions and 14 removals   
+       246      };
+       247    }
+       248    
+       249 -  // Debug: Check if Babel is available
+       250 -  if (typeof Babel === 'undefined') {
+       251 -    console.error('[Vue2 Compiler] Babel standalone is not 
+           - loaded');
+       252 -  } else {
+       253 -    console.log('[Vue2 Compiler] Babel standalone loaded 
+           - successfully');
+       249 +  // Lazy-initialized compiler instance
+       250 +  // This ensures Babel is loaded before we try to use it
+       251 +  let _compiler: ReturnType<typeof createCompiler> | null = 
+           + null;
+       252 +  
+       253 +  function getCompiler() {
+       254 +    if (!_compiler) {
+       255 +      if (typeof Babel === 'undefined') {
+       256 +        throw new Error('[Vue2 Compiler] Babel standalone is 
+           + not loaded. Make sure @babel/standalone script is loaded 
+           + before using the compiler.');
+       257 +      }
+       258 +      console.log('[Vue2 Compiler] Initializing compiler with
+           +  Babel standalone');
+       259 +      _compiler = createCompiler({
+       260 +        babel: Babel as any,
+       261 +        availablePlugins: {},
+       262 +        availablePresets: {
+       263 +          env: 'env',
+       264 +          typescript: 'typescript',
+       265 +          'vue2-jsx': 'env', // Fallback for browser
+       266 +        },
+       267 +      });
+       268 +    }
+       269 +    return _compiler;
+       270    }
+       271    
+       272 -  export const compiler = createCompiler({
+       273 -    babel: Babel as any,
+       274 -    availablePlugins: {},
+       275 -    availablePresets: {
+       276 -      env: 'env',
+       277 -      typescript: 'typescript',
+       278 -      'vue2-jsx': 'env', // Fallback for browser
+       279 -    },
+       280 -  });
+       272 +  // Legacy export for backwards compatibility (will throw if
+           +  Babel not loaded)
+       273 +  export const compiler = {
+       274 +    get toCommonJS() { return getCompiler().toCommonJS; },
+       275 +    get transformTS() { return getCompiler().transformTS; },
+       276 +    get compileSFC() { return getCompiler().compileSFC; },
+       277 +  };
+       278    
+       279    /**
+       280     * Compile function matching dumi's expected interface:
+
+⏺ Now let me rebuild the package:
+
+⏺ Bash(pnpm build:lib)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build:lib /Users/wisedu/Documents/GitHub/du
+    mi-theme-lobehub/packages/preset-vue2
+    > tsup --minify
+    … +39 lines (ctrl+o to expand)
+
+
+⏺ Also need to rebuild the main plugin since the techStack change needs to
+  be included:
+
+⏺ Bash(pnpm build)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build /Users/wisedu/Documents/GitHub/dumi-t
+    heme-lobehub/packages/preset-vue2
+    > father build
+    … +26 lines (ctrl+o to expand)
+
+
+⏺ Both builds successful. The fixes I made:
+
+  1. Removed async: true from head scripts - Babel now loads synchronously
+  2. Made compiler lazy-initialized - only creates Babel wrapper when
+  compile() is first called, not at module load time
+
+  To test:
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+
+  Then open http://localhost:8000/vue2 and try editing the demo code. You 
+  should now see:
+  - [Vue2 Compiler] Initializing compiler with Babel standalone when you
+  first edit code
+  - [Vue2 Compiler] compile() called: followed by the compilation logs
+
+> [Vue2 Compiler] Compiled code preview: 
+import Vue from 'vue';
+import { Card, Form, FormItem, Input, Select, Option, Button, Message } from
+ 'element-ui';
+import 'element-ui/lib/theme-chalk/index.css';
+Vue.use(Card);
+Vue.use(Form);
+Vue.use(FormItem);
+Vue.use(Input);
+Vue.use(Select);
+Vue.use(Option);
+Vue.use(Button);
+const __sfc___raw = Vue.extend({
+  name: 'LoginFormSFC',
+  data() {
+    return {
+      loading: false,
+      formData: {
+        username: '',
+        password: '',
+        region: ''
+      },
+      rules: {
+        userna
+
+SyntaxError: Cannot use import statement outside a module 
+
+⏺ The compiler is now working (Babel is loaded), but the SFC output still
+  has ES module imports. The script content has import Vue from 'vue' which
+  needs to be converted to CommonJS. Let me fix the compile function to also
+   convert SFC output:
+
+⏺ Read(src/compiler/browser.ts)
+  ⎿  Read 57 lines
+
+⏺ The SFC script content has ES module imports that need to be converted to
+  CommonJS. Let me fix the compile function to properly convert the entire
+  output:
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 9 additions and 7 removals     
+       315        }
+       316        js += `\n${COMP_IDENTIFIER}.__id__ = "${id}";`;
+       317    
+       318 -      // Export the component for dumi's evalCommonJS
+       319 -      // Use direct module.exports assignment (no ES module 
+           - transform needed)
+       320 -      js += `\nmodule.exports = ${COMP_IDENTIFIER};`;
+       321 -      js += `\nmodule.exports.default = ${COMP_IDENTIFIER};`;
+       318 +      // Add ES module export so toCommonJS can convert it
+       319 +      js += `\nexport default ${COMP_IDENTIFIER};`;
+       320    
+       321 -      console.log('[Vue2 Compiler] Compilation successful, JS
+           -  length:', js.length);
+       322 -      console.log('[Vue2 Compiler] Compiled code preview:', 
+           - js.substring(0, 500));
+       323 -      return js;
+       321 +      // Convert entire output to CommonJS (including the ES 
+           + imports in script content)
+       322 +      const cjsResult = compiler.toCommonJS(js);
+       323 +      const finalCode = cjsResult?.code || js;
+       324 +  
+       325 +      console.log('[Vue2 Compiler] Compilation successful, JS
+           +  length:', finalCode.length);
+       326 +      console.log('[Vue2 Compiler] Compiled code preview:', 
+           + finalCode.substring(0, 500));
+       327 +      return finalCode;
+       328      } catch (error) {
+       329        console.error('[Vue2 Compiler] Error during 
+             compilation:', error);
+       330        console.error('[Vue2 Compiler] Error stack:', (error as
+              Error).stack);
+
+⏺ Now rebuild:
+
+⏺ Bash(pnpm build:lib)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build:lib /Users/wisedu/Documents/GitHub/du
+    mi-theme-lobehub/packages/preset-vue2
+    > tsup --minify
+    … +39 lines (ctrl+o to expand)
+
+
+⏺ Build successful. Now the SFC output will be converted to CommonJS format
+  (imports to require()).
+
+  To test:
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+
+  The compiled code preview should now show require() instead of import,
+  making it compatible with dumi's evalCommonJS.
+
+> 完美但是有一个小瑕疵，我输了几个字就出现了几个实例，demo组件越来越多 
+
+⏺ The live editing works now, but there's a memory leak - Vue instances
+  aren't being cleaned up when re-rendering. Let me check the renderer:
+
+⏺ Read(src/vue2/runtime/renderer.ts)
+  ⎿  Read 47 lines
+
+⏺ The issue is that Vue 2's $mount() replaces the element, and $destroy()
+  doesn't clear the DOM. I need to properly clean up the canvas before each
+  render:
+
+⏺ Update(src/vue2/runtime/renderer.ts)
+  ⎿  Updated src/vue2/runtime/renderer.ts with 23 additions and 12 removals
+       3    
+       4    const renderer: IDemoCancelableFn = async function (canvas, 
+           component) {
+       5      console.log('[Vue2 Renderer] Rendering component:', 
+           component);
+       6 -    console.log('[Vue2 Renderer] Component type:', typeof 
+         - component);
+       7 -    console.log('[Vue2 Renderer] Component keys:', component ? 
+         - Object.keys(component) : 'undefined');
+       6    
+       7      if (!component) {
+       8        console.error('[Vue2 Renderer] Component is undefined!');
+     ...
+       13    
+       14      // Handle CSS injection
+       15      if (component.__css__) {
+       16 -      setTimeout(() => {
+       17 -        document
+       18 -          .querySelectorAll(`style[css-${component.__id__}]`)
+       19 -          .forEach((el) => el.remove());
+       20 -        document.head.insertAdjacentHTML(
+       21 -          'beforeend',
+       22 -          `<style 
+          -  css-${component.__id__}>${component.__css__}</style>`,
+       23 -        );
+       24 -      }, 1);
+       16 +      // Remove old styles first
+       17 +      document
+       18 +        .querySelectorAll(`style[css-${component.__id__}]`)
+       19 +        .forEach((el) => el.remove());
+       20 +      document.head.insertAdjacentHTML(
+       21 +        'beforeend',
+       22 +        `<style 
+          +  css-${component.__id__}>${component.__css__}</style>`,
+       23 +      );
+       24      }
+       25    
+       26      try {
+       27 +      // Clear canvas before mounting (important for 
+          + re-renders)
+       28 +      canvas.innerHTML = '';
+       29 +  
+       30 +      // Create a mount point inside canvas
+       31 +      // Vue 2's $mount replaces the element, so we need a 
+          + wrapper
+       32 +      const mountPoint = document.createElement('div');
+       33 +      canvas.appendChild(mountPoint);
+       34 +  
+       35        // Vue 2 mounting
+       36        const vm = new Vue({
+       37          render: (h) => h(component),
+       38        });
+       39    
+       40 -      vm.$mount(canvas);
+       40 +      vm.$mount(mountPoint);
+       41        console.log('[Vue2 Renderer] Component mounted 
+            successfully');
+       42    
+       43        // Return cleanup function
+       44        return () => {
+       45          vm.$destroy();
+       46 +        // Clear the DOM after destroy
+       47 +        if (vm.$el && vm.$el.parentNode) {
+       48 +          vm.$el.parentNode.removeChild(vm.$el);
+       49 +        }
+       50 +        // Also clear canvas to be safe
+       51 +        canvas.innerHTML = '';
+       52        };
+       53      } catch (error) {
+       54        console.error('[Vue2 Renderer] Error mounting 
+            component:', error);
+
+⏺ Now rebuild:
+
+⏺ Bash(pnpm build:lib)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build:lib /Users/wisedu/Documents/GitHub/du
+    mi-theme-lobehub/packages/preset-vue2
+    > tsup --minify
+    … +39 lines (ctrl+o to expand)
+
+  ⎿ API Error: 500 
+    {"type":"error","error":{"type":"api_error","message":"Internal server 
+    error"},"request_id":"req_011CVUL54CpzhrgXsJjfQcyw"}
+
+> 继续 
+  ⎿  Interrupted · What should Claude do instead?
+
+> 继续 
+
+⏺ Build successful. The renderer now properly cleans up Vue instances:
+
+  1. Clears canvas before mounting
+  2. Creates a wrapper div for Vue to mount into
+  3. Properly removes DOM and clears canvas in cleanup
+
+  To test:
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+
+  Now when you edit code, it should only show one instance instead of
+  multiple.
+
+> 完美 
+
+⏺ 太好了！Vue 2 live editing 现在完全正常工作了。
+
+  修复总结:
+
+  1. Babel 加载问题 - 移除了 async: true，改为懒加载初始化编译器
+  2. ES module 转 CommonJS - SFC 输出现在正确转换为 CommonJS 格式
+  3. Vue.extend() 构造函数问题 - 提取 .options 对象避免 React setState 调用
+  4. 多实例问题 - 修复 renderer 正确清理 canvas 和 Vue 实例
+
+  如果需要提交这些更改，可以运行：
+  git add -A && git commit -m "fix: Vue 2 live demo editing support"
+
+> 先移除掉打印信息吧 
+
+⏺ Read(src/compiler/browser.ts)
+  ⎿  Read 337 lines
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 3 removals                     
+       61      ) {
+       62        const { lang, plugins = [], presets = [] } = options;
+       63    
+       64 -      console.log('[Vue2 Compiler] transformTS called with 
+          - lang:', lang, 'filename:', filename);
+       65 -  
+       64        if (lang === 'ts' || lang === 'tsx') {
+       65          const isTSX = lang === 'tsx';
+       66          // IMPORTANT: allExtensions must be true for Vue SFC 
+            files
+     ...
+       70            availablePresets['typescript'] ?? 'typescript',
+       71            { isTSX, allExtensions: true, onlyRemoveTypeImports:
+             true },
+       72          ]);
+       73 -        console.log('[Vue2 Compiler] Added TypeScript preset 
+          - with allExtensions: true');
+       73        }
+       74    
+       75        if (lang === 'tsx' || lang === 'jsx') {
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 7 additions and 13 removals    
+       75        }
+       76    
+       77        const { basename } = resolveFilename(filename);
+       78 -      try {
+       79 -        // @babel/standalone uses transform (not 
+          - transformSync) in browser
+       80 -        const result = babel.transform(src, {
+       81 -          filename: basename + '.' + (lang || 'js'),
+       82 -          presets,
+       83 -          plugins,
+       84 -        });
+       85 -        console.log('[Vue2 Compiler] Babel transform 
+          - successful');
+       86 -        return result?.code || '';
+       87 -      } catch (error) {
+       88 -        console.error('[Vue2 Compiler] Babel transform 
+          - error:', error);
+       89 -        throw error;
+       90 -      }
+       78 +      // @babel/standalone uses transform (not transformSync) 
+          + in browser
+       79 +      const result = babel.transform(src, {
+       80 +        filename: basename + '.' + (lang || 'js'),
+       81 +        presets,
+       82 +        plugins,
+       83 +      });
+       84 +      return result?.code || '';
+       85      }
+       86    
+       87      function doCompileScript(
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 2 removals                
+       168      function compileSFC(options: CompileOptions): 
+             CompileResult {
+       169        const { id, code, filename } = options;
+       170    
+       171 -      console.log('[Vue2 Compiler] compileSFC called:', 
+           - filename);
+       172 -  
+       171        const descriptor = parse({
+       172          source: code,
+       173          filename,
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 1 removal                   
+       176        });
+       177    
+       178        if (descriptor.errors && descriptor.errors.length) {
+       179 -        console.error('[Vue2 Compiler] Parse errors:', 
+           - descriptor.errors);
+       179          return descriptor.errors.map((e: any) =>
+       180            typeof e === 'string' ? new Error(e) : e,
+       181          );
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 3 removals                    
+       200        const scriptLang = descriptor.script?.lang;
+       201        const hasScoped = descriptor.styles.some((style: any) 
+             => style.scoped);
+       202    
+       203 -      console.log('[Vue2 Compiler] Script lang:', 
+           - scriptLang);
+       204 -  
+       203        const scriptResult = doCompileScript(id, descriptor, 
+             hasScoped, scriptLang || '');
+       204    
+       205        if (Array.isArray(scriptResult)) {
+       206 -        console.error('[Vue2 Compiler] Script compilation 
+           - errors:', scriptResult);
+       206          return scriptResult as Error[];
+       207        }
+       208    
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 1 removal                      
+       240        if (typeof Babel === 'undefined') {
+       241          throw new Error('[Vue2 Compiler] Babel standalone is 
+             not loaded. Make sure @babel/standalone script is loaded 
+             before using the compiler.');
+       242        }
+       243 -      console.log('[Vue2 Compiler] Initializing compiler with
+           -  Babel standalone');
+       243        _compiler = createCompiler({
+       244          babel: Babel as any,
+       245          availablePlugins: {},
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 21 additions and 37 removals   
+       272      // Generate id from filename
+       273      const id = filename.replace(/[^a-zA-Z0-9]/g, '_');
+       274    
+       275 -    console.log('[Vue2 Compiler] compile() called:', { 
+           - filename, lang: lang || 'unknown' });
+       275 +    if (['js', 'jsx', 'ts', 'tsx'].includes(lang)) {
+       276 +      const result = compiler.transformTS(code, filename, { 
+           + lang });
+       277 +      // Convert to CommonJS for dumi's evalCommonJS
+       278 +      const cjsResult = compiler.toCommonJS(result);
+       279 +      return cjsResult?.code || '';
+       280 +    }
+       281    
+       282 -    try {
+       283 -      if (['js', 'jsx', 'ts', 'tsx'].includes(lang)) {
+       284 -        console.log('[Vue2 Compiler] Transforming', lang, 
+           - 'file:', filename);
+       285 -        const result = compiler.transformTS(code, filename, {
+           -  lang });
+       286 -        // Convert to CommonJS for dumi's evalCommonJS
+       287 -        const cjsResult = compiler.toCommonJS(result);
+       288 -        console.log('[Vue2 Compiler] Transform result 
+           - length:', cjsResult?.code?.length);
+       289 -        return cjsResult?.code || '';
+       290 -      }
+       282 +    const compiled = compiler.compileSFC({ id, filename, code
+           +  });
+       283    
+       284 -      console.log('[Vue2 Compiler] Compiling SFC:', 
+           - filename);
+       285 -      const compiled = compiler.compileSFC({ id, filename, 
+           - code });
+       284 +    if (Array.isArray(compiled)) {
+       285 +      // Return error as string for dumi to display
+       286 +      return `throw new Error(${JSON.stringify(compiled.map(e
+           +  => e.toString()).join('\\n'))});`;
+       287 +    }
+       288    
+       289 -      if (Array.isArray(compiled)) {
+       290 -        console.error('[Vue2 Compiler] Compilation errors:', 
+           - compiled);
+       291 -        // Return error as string for dumi to display
+       292 -        return `throw new 
+           - Error(${JSON.stringify(compiled.map(e => 
+           - e.toString()).join('\\n'))});`;
+       293 -      }
+       289 +    let { js, css } = compiled;
+       290 +    if (css) {
+       291 +      js += `\n${COMP_IDENTIFIER}.__css__ = 
+           + ${JSON.stringify(css)};`;
+       292 +    }
+       293 +    js += `\n${COMP_IDENTIFIER}.__id__ = "${id}";`;
+       294    
+       295 -      let { js, css } = compiled;
+       296 -      if (css) {
+       297 -        js += `\n${COMP_IDENTIFIER}.__css__ = 
+           - ${JSON.stringify(css)};`;
+       298 -      }
+       299 -      js += `\n${COMP_IDENTIFIER}.__id__ = "${id}";`;
+       295 +    // Add ES module export so toCommonJS can convert it
+       296 +    js += `\nexport default ${COMP_IDENTIFIER};`;
+       297    
+       298 -      // Add ES module export so toCommonJS can convert it
+       299 -      js += `\nexport default ${COMP_IDENTIFIER};`;
+       300 -  
+       301 -      // Convert entire output to CommonJS (including the ES 
+           - imports in script content)
+       302 -      const cjsResult = compiler.toCommonJS(js);
+       303 -      const finalCode = cjsResult?.code || js;
+       304 -  
+       305 -      console.log('[Vue2 Compiler] Compilation successful, JS
+           -  length:', finalCode.length);
+       306 -      console.log('[Vue2 Compiler] Compiled code preview:', 
+           - finalCode.substring(0, 500));
+       307 -      return finalCode;
+       308 -    } catch (error) {
+       309 -      console.error('[Vue2 Compiler] Error during 
+           - compilation:', error);
+       310 -      console.error('[Vue2 Compiler] Error stack:', (error as
+           -  Error).stack);
+       311 -      throw error;
+       312 -    }
+       298 +    // Convert entire output to CommonJS (including the ES 
+           + imports in script content)
+       299 +    const cjsResult = compiler.toCommonJS(js);
+       300 +    return cjsResult?.code || js;
+       301    }
+       302    
+       303    // Default export required by dumi's live demo system
+
+⏺ Now let me remove console.log from the renderer:
+
+⏺ Update(src/vue2/runtime/renderer.ts)
+  ⎿  Updated src/vue2/runtime/renderer.ts with 3 removals                
+       2    import Vue from 'vue';
+       3    
+       4    const renderer: IDemoCancelableFn = async function (canvas, 
+           component) {
+       5 -    console.log('[Vue2 Renderer] Rendering component:', 
+         - component);
+       6 -  
+       5      if (!component) {
+       6 -      console.error('[Vue2 Renderer] Component is undefined!');
+       6        throw new Error('Component is undefined');
+       7      }
+       8    
+
+⏺ Update(src/vue2/runtime/renderer.ts)
+  ⎿  Updated src/vue2/runtime/renderer.ts with 2 removals       
+       33        });
+       34    
+       35        vm.$mount(mountPoint);
+       36 -      console.log('[Vue2 Renderer] Component mounted 
+          - successfully');
+       36    
+       37        // Return cleanup function
+       38        return () => {
+     ...
+       46          canvas.innerHTML = '';
+       47        };
+       48      } catch (error) {
+       49 -      console.error('[Vue2 Renderer] Error mounting 
+          - component:', error);
+       49        throw error;
+       50      }
+       51    };
+
+⏺ Now rebuild:
+
+⏺ Bash(pnpm build:lib)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build:lib /Users/wisedu/Documents/GitHub/du
+    mi-theme-lobehub/packages/preset-vue2
+    > tsup --minify
+    … +39 lines (ctrl+o to expand)
+
+
+⏺ 已移除所有调试打印信息。文件大小也变小了:
+  - compiler.mjs: 4.70 KB → 3.52 KB
+  - renderer.mjs: 768 B → 534 B
+
+  重启 dev server 测试:
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+
+> 发现了问题哦，更改模版部分是可以实时编译的，但是修改js，修改css样式，这些
+并没有实施更新！，请完善SFC的这些能力，同时tsx出现了问题SyntaxError: 
+unknown: Support for the experimental syntax 'jsx' isn't currently enabled 
+(87:14): 85 | }; 86 | return function () { > 87 | return <_elementUi.Card 
+class="login-form-card"> | ^ 88 | <div slot="header"> 89 | <span>JSX Demo - 
+Login Form</span> 90 | </div> Add @babel/preset-react 
+(https://github.com/babel/babel/tree/main/packages/babel-preset-react) to 
+the 'presets' section of your Babel config to enable transformation. If you 
+want to leave it as-is, add @babel/plugin-syntax-jsx 
+(https://github.com/babel/babel/tree/main/packages/babel-plugin-syntax-jsx) 
+to the 'plugins' section to enable parsing.
+
+
+
+还是加上调试信息吧，定位一下问题并修复这些问题 
+
+⏺ 明白了，有两个问题：
+  1. JS/CSS 修改不更新
+  2. TSX/JSX 语法不支持
+
+  让我加回调试信息并修复这些问题：
+
+⏺ Read(src/compiler/browser.ts)
+  ⎿  Read 305 lines
+
+⏺ 我发现问题了：
+
+  1. JSX 问题: toCommonJS 使用 env preset，它不支持 JSX。需要在转换时也包含
+  JSX 支持
+  2. JS/CSS 不更新: 需要调试看看具体原因
+
+  让我修复这些问题并加回调试信息：
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 8 additions and 4 removals     
+       43      availablePlugins = {},
+       44      availablePresets = {},
+       45    }: CreateCompilerContext) {
+       46 -    function toCommonJS(es: string) {
+       46 +    // Convert ES modules to CommonJS, with JSX support
+       47 +    function toCommonJS(es: string, options: { hasJSX?: 
+          + boolean } = {}) {
+       48 +      const presets: any[] = [[availablePresets['env'] ?? 
+          + 'env', { modules: 'cjs' }]];
+       49 +      // Add React preset for JSX support if needed
+       50 +      if (options.hasJSX) {
+       51 +        presets.unshift([availablePresets['react'] ?? 'react',
+          +  {}]);
+       52 +      }
+       53        // @babel/standalone uses transform (not transformSync) 
+            in browser
+       54 -      return babel.transform(es, {
+       55 -        presets: [[availablePresets['env'] ?? 'env', { 
+          - modules: 'cjs' }]],
+       56 -      });
+       54 +      return babel.transform(es, { presets });
+       55      }
+       56    
+       57      function transformTS(
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 3 additions and 1 removal      
+       244        if (typeof Babel === 'undefined') {
+       245          throw new Error('[Vue2 Compiler] Babel standalone is 
+             not loaded. Make sure @babel/standalone script is loaded 
+             before using the compiler.');
+       246        }
+       247 +      console.log('[Vue2 Compiler] Initializing compiler with
+           +  Babel standalone');
+       248 +      console.log('[Vue2 Compiler] Available Babel presets:',
+           +  Object.keys((Babel as any).availablePresets || {}));
+       249        _compiler = createCompiler({
+       250          babel: Babel as any,
+       251          availablePlugins: {},
+       252          availablePresets: {
+       253            env: 'env',
+       254            typescript: 'typescript',
+       255 -          'vue2-jsx': 'env', // Fallback for browser
+       255 +          react: 'react', // For JSX support in toCommonJS
+       256          },
+       257        });
+       258      }
+
+⏺ Now update the compile function with debug logs and JSX detection:
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 22 additions and 3 removals    
+       277      const [, lang] = filename.match(/[^.]+\.([^.]+)$/) || [];
+       278      // Generate id from filename
+       279      const id = filename.replace(/[^a-zA-Z0-9]/g, '_');
+       280 +    const hasJSX = lang === 'jsx' || lang === 'tsx';
+       281    
+       282 +    console.log('[Vue2 Compiler] compile() called:', { 
+           + filename, lang: lang || 'unknown', hasJSX });
+       283 +  
+       284      if (['js', 'jsx', 'ts', 'tsx'].includes(lang)) {
+       285 +      console.log('[Vue2 Compiler] Transforming non-SFC 
+           + file:', lang);
+       286        const result = compiler.transformTS(code, filename, { 
+             lang });
+       287 +      console.log('[Vue2 Compiler] After transformTS, code 
+           + length:', result.length);
+       288        // Convert to CommonJS for dumi's evalCommonJS
+       289 -      const cjsResult = compiler.toCommonJS(result);
+       289 +      const cjsResult = compiler.toCommonJS(result
+           +  , { hasJSX });
+       290 +      console.log('[Vue2 Compiler] After toCommonJS, code 
+           + length:', cjsResult?.code?.length);
+       291        return cjsResult?.code || '';
+       292      }
+       293    
+       294 +    console.log('[Vue2 Compiler] Compiling SFC:', filename);
+       295      const compiled = compiler.compileSFC({ id, filename, code
+              });
+       296    
+       297      if (Array.isArray(compiled)) {
+       298 +      console.error('[Vue2 Compiler] Compilation errors:', 
+           + compiled);
+       299        // Return error as string for dumi to display
+       300        return `throw new Error(${JSON.stringify(compiled.map(e
+              => e.toString()).join('\\n'))});`;
+       301      }
+       302    
+       303      let { js, css } = compiled;
+       304 +    console.log('[Vue2 Compiler] SFC compiled - JS length:', 
+           + js.length, 'CSS length:', css.length);
+       305 +    console.log('[Vue2 Compiler] CSS content:', 
+           + css.substring(0, 200));
+       306 +  
+       307      if (css) {
+       308        js += `\n${COMP_IDENTIFIER}.__css__ = 
+             ${JSON.stringify(css)};`;
+       309      }
+     ...
+       301      // Add ES module export so toCommonJS can convert it
+       302      js += `\nexport default ${COMP_IDENTIFIER};`;
+       303    
+       304 +    // Check if SFC script contains JSX
+       305 +    const sfcHasJSX = 
+           + /<script[^>]*\slang=["'](jsx|tsx)["']/.test(code);
+       306 +    console.log('[Vue2 Compiler] SFC has JSX:', sfcHasJSX);
+       307 +  
+       308      // Convert entire output to CommonJS (including the ES 
+             imports in script content)
+       309 -    const cjsResult = compiler.toCommonJS(js);
+       310 -    return cjsResult?.code || js;
+       309 +    const cjsResult = compiler.toCommonJS(js
+           +  , { hasJSX: sfcHasJSX });
+       310 +    const finalCode = cjsResult?.code || js;
+       311 +  
+       312 +    console.log('[Vue2 Compiler] Final code length:', 
+           + finalCode.length);
+       313 +    console.log('[Vue2 Compiler] Final code preview:', 
+           + finalCode.substring(0, 300));
+       314 +    return finalCode;
+       315    }
+       316    
+       317    // Default export required by dumi's live demo system
+
+⏺ Now add debug logs to the renderer:
+
+⏺ Update(src/vue2/runtime/renderer.ts)
+  ⎿  File must be read first
+
+⏺ Read(src/vue2/runtime/renderer.ts)
+  ⎿  Read 53 lines
+
+⏺ Update(src/vue2/runtime/renderer.ts)
+  ⎿  Updated src/vue2/runtime/renderer.ts with 13 additions and 3 removals
+        2    import Vue from 'vue';
+        3    
+        4    const renderer: IDemoCancelableFn = async function (canvas, 
+            component) {
+        5 +    console.log('[Vue2 Renderer] render called');
+        6 +    console.log('[Vue2 Renderer] Component __id__:', 
+          + component?.__id__);
+        7 +    console.log('[Vue2 Renderer] Component __css__ length:', 
+          + component?.__css__?.length);
+        8 +    console.log('[Vue2 Renderer] Component data:', 
+          + component?.data);
+        9 +    console.log('[Vue2 Renderer] Component methods:', 
+          + component?.methods ? Object.keys(component.methods) : 
+          + 'none');
+       10 +  
+       11      if (!component) {
+       12        throw new Error('Component is undefined');
+       13      }
+       14    
+       15      // Handle CSS injection
+       16      if (component.__css__) {
+       17 +      console.log('[Vue2 Renderer] Injecting CSS, first 100 
+          + chars:', component.__css__.substring(0, 100));
+       18        // Remove old styles first
+       19 -      document
+       20 -        .querySelectorAll(`style[css-${component.__id__}]`)
+       21 -        .forEach((el) => el.remove());
+       19 +      const oldStyles = 
+          + document.querySelectorAll(`style[css-${component.__id__}]`);
+       20 +      console.log('[Vue2 Renderer] Removing old styles, 
+          + count:', oldStyles.length);
+       21 +      oldStyles.forEach((el) => el.remove());
+       22        document.head.insertAdjacentHTML(
+       23          'beforeend',
+       24          `<style 
+            css-${component.__id__}>${component.__css__}</style>`,
+     ...
+       33        });
+       34    
+       35        vm.$mount(mountPoint);
+       36 +      console.log('[Vue2 Renderer] Component mounted 
+          + successfully');
+       37    
+       38        // Return cleanup function
+       39        return () => {
+       40 +        console.log('[Vue2 Renderer] Cleanup called for:', 
+          + component?.__id__);
+       41          vm.$destroy();
+       42          // Clear the DOM after destroy
+       43          if (vm.$el && vm.$el.parentNode) {
+     ...
+       45          canvas.innerHTML = '';
+       46        };
+       47      } catch (error) {
+       48 +      console.error('[Vue2 Renderer] Error mounting 
+          + component:', error);
+       49        throw error;
+       50      }
+       51    };
+
+⏺ Now rebuild:
+
+⏺ Bash(pnpm build:lib)
+  ⎿  Error: Exit code 254
+     undefined
+      ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command "build:lib" not found
+
+     Did you mean "pnpm build"?
+
+⏺ Bash(cd /Users/wisedu/Documents/GitHub/dumi-theme-lobehub/packages/preset-vue2
+       && pnpm build:lib)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build:lib /Users/wisedu/Documents/GitHub/du
+    mi-theme-lobehub/packages/preset-vue2
+    > tsup --minify
+    … +39 lines (ctrl+o to expand)
+
+
+⏺ Build successful. 修复了以下问题：
+
+  1. JSX 支持: 添加了 react preset 到 toCommonJS，用于处理 JSX 语法
+  2. 添加调试信息: 在 compiler 和 renderer 中都添加了详细的日志
+
+  测试:
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+
+  然后：
+  1. 修改 .vue 文件的 <script> 部分，看看控制台日志
+  2. 修改 .vue 文件的 <style> 部分，看看 CSS 是否更新
+  3. 测试 .tsx 文件
+
+  请分享控制台中的 [Vue2 Compiler] 和 [Vue2 Renderer]
+  日志，这样我可以定位问题。
+
+> tsx有这个错误Error: Invalid preset specified in Babel options: 
+"@vue/babel-preset-jsx,[object Object]" 
+
+⏺ 问题在于 @vue/babel-preset-jsx 在浏览器的 @babel/standalone
+  中不可用。需要使用内置的 react preset。让我修复：
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 7 additions and 1 removal      
+       65      ) {
+       66        const { lang, plugins = [], presets = [] } = options;
+       67    
+       68 +      console.log('[Vue2 Compiler] transformTS called, lang:',
+          +  lang);
+       69 +  
+       70        if (lang === 'ts' || lang === 'tsx') {
+       71          const isTSX = lang === 'tsx';
+       72          // IMPORTANT: allExtensions must be true for Vue SFC 
+            files
+     ...
+       74          ]);
+       75        }
+       76    
+       77 +      // Use React preset for JSX transformation (available in
+          +  @babel/standalone)
+       78        if (lang === 'tsx' || lang === 'jsx') {
+       79 -        presets.push(availablePresets['vue2-jsx'] ?? 
+          - ['@vue/babel-preset-jsx', {}]);
+       79 +        console.log('[Vue2 Compiler] Adding React preset for 
+          + JSX');
+       80 +        presets.push([availablePresets['react'] ?? 'react', 
+          + {}]);
+       81        }
+       82    
+       83        const { basename } = resolveFilename(filename);
+       84 +      console.log('[Vue2 Compiler] Babel transform with 
+          + presets:', presets.map(p => Array.isArray(p) ? p[0] : p));
+       85 +  
+       86        // @babel/standalone uses transform (not transformSync) 
+            in browser
+       87        const result = babel.transform(src, {
+       88          filename: basename + '.' + (lang || 'js'),
+
+⏺ Bash(pnpm build:lib)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build:lib /Users/wisedu/Documents/GitHub/du
+    mi-theme-lobehub/packages/preset-vue2
+    > tsup --minify
+    … +39 lines (ctrl+o to expand)
+
+
+⏺ Build 完成。现在 TSX/JSX 使用 @babel/standalone 内置的 react preset。
+
+  测试:
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+
+  测试 TSX 文件和 SFC 文件的修改（JS 和 CSS 部分），分享控制台日志。
+
+> installHook.js:1 [Vue warn]: Error in render: "ReferenceError: React is 
+not defined"
+
+found in
+
+---> <LoginFormJSX>
+       <Root>
+overrideMethod @ installHook.js:1
+console.<computed> @ index.js:1
+warn$2 @ vue.esm.js:5126
+logError @ vue.esm.js:3781
+globalHandleError @ vue.esm.js:3777
+handleError @ vue.esm.js:3744
+Vue._render @ vue.esm.js:2553
+updateComponent @ vue.esm.js:3096
+push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.js.Watch
+er.get @ vue.esm.js:4182
+Watcher @ vue.esm.js:4172
+mountComponent @ vue.esm.js:3113
+push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.js.Vue.$
+mount @ vue.esm.js:9335
+push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.js.Vue.$
+mount @ vue.esm.js:11900
+init @ vue.esm.js:4928
+createComponent @ vue.esm.js:6600
+createElm @ vue.esm.js:6554
+patch @ vue.esm.js:7142
+Vue._update @ vue.esm.js:2986
+updateComponent @ vue.esm.js:3096
+push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.js.Watch
+er.get @ vue.esm.js:4182
+Watcher @ vue.esm.js:4172
+mountComponent @ vue.esm.js:3113
+push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.js.Vue.$
+mount @ vue.esm.js:9335
+push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.js.Vue.$
+mount @ vue.esm.js:11900
+_callee$ @ renderer.mjs:1
+tryCatch @ regeneratorRuntime.js:45
+（匿名） @ regeneratorRuntime.js:133
+（匿名） @ regeneratorRuntime.js:74
+asyncGeneratorStep @ asyncToGenerator.js:3
+_next @ asyncToGenerator.js:22
+（匿名） @ asyncToGenerator.js:27
+（匿名） @ asyncToGenerator.js:19
+t @ renderer.mjs:1
+_callee$ @ useRenderer.js:75
+tryCatch @ useRenderer.js:2
+（匿名） @ useRenderer.js:2
+（匿名） @ useRenderer.js:2
+asyncGeneratorStep @ useRenderer.js:3
+_next @ useRenderer.js:4
+Promise.then
+asyncGeneratorStep @ useRenderer.js:3
+_next @ useRenderer.js:4
+（匿名） @ useRenderer.js:4
+（匿名） @ useRenderer.js:4
+_resolveRender @ useRenderer.js:108
+resolveRender @ useRenderer.js:44
+（匿名） @ useRenderer.js:110
+commitHookEffectListMount @ react-dom.development.js:23189
+commitPassiveMountOnFiber @ react-dom.development.js:24965
+commitPassiveMountEffects_complete @ react-dom.development.js:24930
+commitPassiveMountEffects_begin @ react-dom.development.js:24917
+commitPassiveMountEffects @ react-dom.development.js:24905
+flushPassiveEffectsImpl @ react-dom.development.js:27078
+flushPassiveEffects @ react-dom.development.js:27023
+performConcurrentWorkOnRoot @ react-dom.development.js:25748
+workLoop @ scheduler.development.js:266
+flushWork @ scheduler.development.js:239
+performWorkUntilDeadline @ scheduler.development.js:533
+（匿名） @ setImmediate.js:40
+p @ setImmediate.js:69
+s @ setImmediate.js:109
+postMessage
+r @ setImmediate.js:120
+h.setImmediate @ setImmediate.js:27
+schedulePerformWorkUntilDeadline @ scheduler.development.js:564
+performWorkUntilDeadline @ scheduler.development.js:538
+（匿名） @ setImmediate.js:40
+p @ setImmediate.js:69
+s @ setImmediate.js:109
+postMessage
+r @ setImmediate.js:120
+h.setImmediate @ setImmediate.js:27
+schedulePerformWorkUntilDeadline @ scheduler.development.js:564
+requestHostCallback @ scheduler.development.js:588
+unstable_scheduleCallback @ scheduler.development.js:441
+scheduleCallback$1 @ react-dom.development.js:27576
+ensureRootIsScheduled @ react-dom.development.js:25722
+scheduleUpdateOnFiber @ react-dom.development.js:25570
+dispatchSetState @ react-dom.development.js:16708
+_callee$ @ useLiveDemo.js:151
+tryCatch @ useLiveDemo.js:2
+（匿名） @ useLiveDemo.js:2
+（匿名） @ useLiveDemo.js:2
+asyncGeneratorStep @ useLiveDemo.js:3
+_next @ useLiveDemo.js:4
+Promise.then
+asyncGeneratorStep @ useLiveDemo.js:3
+_next @ useLiveDemo.js:4
+Promise.then
+asyncGeneratorStep @ useLiveDemo.js:3
+_next @ useLiveDemo.js:4
+Promise.then
+asyncGeneratorStep @ useLiveDemo.js:3
+_next @ useLiveDemo.js:4
+（匿名） @ useLiveDemo.js:4
+（匿名） @ useLiveDemo.js:4
+（匿名） @ useLiveDemo.js:237
+invokeFunc @ index.js:160
+leadingEdge @ index.js:170
+debounced @ index.js:235
+onChange @ index.js:200
+onChange @ index.js:58
+callCallback @ react-dom.development.js:4164
+invokeGuardedCallbackDev @ react-dom.development.js:4213
+invokeGuardedCallback @ react-dom.development.js:4277
+invokeGuardedCallbackAndCatchFirstError @ react-dom.development.js:4291
+executeDispatch @ react-dom.development.js:9041
+processDispatchQueueItemsInOrder @ react-dom.development.js:9073
+processDispatchQueue @ react-dom.development.js:9086
+dispatchEventsForPlugins @ react-dom.development.js:9097
+（匿名） @ react-dom.development.js:9288
+batchedUpdates$1 @ react-dom.development.js:26179
+batchedUpdates @ react-dom.development.js:3991
+dispatchEventForPluginEventSystem @ react-dom.development.js:9287
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventRep
+lay @ react-dom.development.js:6465
+dispatchEvent @ react-dom.development.js:6457
+dispatchDiscreteEvent @ react-dom.development.js:6430了解此错误
+17:19:14.156 installHook.js:1 ReferenceError: React is not defined
+    at Proxy.eval (eval at evalCommonJS (useLiveDemo.js:23:1), 
+<anonymous>:89:7)
+    at Vue._render (vue.esm.js:2550:1)
+    at VueComponent.updateComponent (vue.esm.js:3096:1)
+    at push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.j
+s.Watcher.get (vue.esm.js:4182:1)
+    at new Watcher (vue.esm.js:4172:1)
+    at mountComponent (vue.esm.js:3113:1)
+    at push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.j
+s.Vue.$mount (vue.esm.js:9335:1)
+    at push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.j
+s.Vue.$mount (vue.esm.js:11900:1)
+    at init (vue.esm.js:4928:1)
+    at createComponent (vue.esm.js:6600:1)
+    at createElm (vue.esm.js:6554:1)
+    at Vue.patch [as __patch__] (vue.esm.js:7142:1)
+    at Vue._update (vue.esm.js:2986:1)
+    at Vue.updateComponent (vue.esm.js:3096:1)
+    at push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.j
+s.Watcher.get (vue.esm.js:4182:1)
+    at new Watcher (vue.esm.js:4172:1)
+    at mountComponent (vue.esm.js:3113:1)
+    at push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.j
+s.Vue.$mount (vue.esm.js:9335:1)
+    at push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.j
+s.Vue.$mount (vue.esm.js:11900:1)
+    at _callee$ (renderer.mjs:1:1)
+    at tryCatch (regeneratorRuntime.js:45:1)
+    at Generator.<anonymous> (regeneratorRuntime.js:133:1)
+    at Generator.next (regeneratorRuntime.js:74:1)
+    at asyncGeneratorStep (asyncToGenerator.js:3:1)
+    at _next (asyncToGenerator.js:22:1)
+    at asyncToGenerator.js:27:1
+    at new Promise (<anonymous>)
+    at asyncToGenerator.js:19:1
+    at t (renderer.mjs:1:1)
+    at _callee$ (useRenderer.js:75:1)
+    at tryCatch (useRenderer.js:2:1)
+    at Generator.<anonymous> (useRenderer.js:2:1)
+    at Generator.next (useRenderer.js:2:1)
+    at asyncGeneratorStep (useRenderer.js:3:1)
+    at _next (useRenderer.js:4:1)
+overrideMethod @ installHook.js:1
+console.<computed> @ index.js:1
+logError @ vue.esm.js:3785
+globalHandleError @ vue.esm.js:3777
+handleError @ vue.esm.js:3744
+Vue._render @ vue.esm.js:2553
+updateComponent @ vue.esm.js:3096
+push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.js.Watch
+er.get @ vue.esm.js:4182
+Watcher @ vue.esm.js:4172
+mountComponent @ vue.esm.js:3113
+push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.js.Vue.$
+mount @ vue.esm.js:9335
+push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.js.Vue.$
+mount @ vue.esm.js:11900
+init @ vue.esm.js:4928
+createComponent @ vue.esm.js:6600
+createElm @ vue.esm.js:6554
+patch @ vue.esm.js:7142
+Vue._update @ vue.esm.js:2986
+updateComponent @ vue.esm.js:3096
+push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.js.Watch
+er.get @ vue.esm.js:4182
+Watcher @ vue.esm.js:4172
+mountComponent @ vue.esm.js:3113
+push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.js.Vue.$
+mount @ vue.esm.js:9335
+push.../node_modules/.pnpm/vue@2.7.16/node_modules/vue/dist/vue.esm.js.Vue.$
+mount @ vue.esm.js:11900
+_callee$ @ renderer.mjs:1
+tryCatch @ regeneratorRuntime.js:45
+（匿名） @ regeneratorRuntime.js:133
+（匿名） @ regeneratorRuntime.js:74
+asyncGeneratorStep @ asyncToGenerator.js:3
+_next @ asyncToGenerator.js:22
+（匿名） @ asyncToGenerator.js:27
+（匿名） @ asyncToGenerator.js:19
+t @ renderer.mjs:1
+_callee$ @ useRenderer.js:75
+tryCatch @ useRenderer.js:2
+（匿名） @ useRenderer.js:2
+（匿名） @ useRenderer.js:2
+asyncGeneratorStep @ useRenderer.js:3
+_next @ useRenderer.js:4
+Promise.then
+asyncGeneratorStep @ useRenderer.js:3
+_next @ useRenderer.js:4
+（匿名） @ useRenderer.js:4
+（匿名） @ useRenderer.js:4
+_resolveRender @ useRenderer.js:108
+resolveRender @ useRenderer.js:44
+（匿名） @ useRenderer.js:110
+commitHookEffectListMount @ react-dom.development.js:23189
+commitPassiveMountOnFiber @ react-dom.development.js:24965
+commitPassiveMountEffects_complete @ react-dom.development.js:24930
+commitPassiveMountEffects_begin @ react-dom.development.js:24917
+commitPassiveMountEffects @ react-dom.development.js:24905
+flushPassiveEffectsImpl @ react-dom.development.js:27078
+flushPassiveEffects @ react-dom.development.js:27023
+performConcurrentWorkOnRoot @ react-dom.development.js:25748
+workLoop @ scheduler.development.js:266
+flushWork @ scheduler.development.js:239
+performWorkUntilDeadline @ scheduler.development.js:533
+（匿名） @ setImmediate.js:40
+p @ setImmediate.js:69
+s @ setImmediate.js:109
+postMessage
+r @ setImmediate.js:120
+h.setImmediate @ setImmediate.js:27
+schedulePerformWorkUntilDeadline @ scheduler.development.js:564
+performWorkUntilDeadline @ scheduler.development.js:538
+（匿名） @ setImmediate.js:40
+p @ setImmediate.js:69
+s @ setImmediate.js:109
+postMessage
+r @ setImmediate.js:120
+h.setImmediate @ setImmediate.js:27
+schedulePerformWorkUntilDeadline @ scheduler.development.js:564
+requestHostCallback @ scheduler.development.js:588
+unstable_scheduleCallback @ scheduler.development.js:441
+scheduleCallback$1 @ react-dom.development.js:27576
+ensureRootIsScheduled @ react-dom.development.js:25722
+scheduleUpdateOnFiber @ react-dom.development.js:25570
+dispatchSetState @ react-dom.development.js:16708
+_callee$ @ useLiveDemo.js:151
+tryCatch @ useLiveDemo.js:2
+（匿名） @ useLiveDemo.js:2
+（匿名） @ useLiveDemo.js:2
+asyncGeneratorStep @ useLiveDemo.js:3
+_next @ useLiveDemo.js:4
+Promise.then
+asyncGeneratorStep @ useLiveDemo.js:3
+_next @ useLiveDemo.js:4
+Promise.then
+asyncGeneratorStep @ useLiveDemo.js:3
+_next @ useLiveDemo.js:4
+Promise.then
+asyncGeneratorStep @ useLiveDemo.js:3
+_next @ useLiveDemo.js:4
+（匿名） @ useLiveDemo.js:4
+（匿名） @ useLiveDemo.js:4
+（匿名） @ useLiveDemo.js:237
+invokeFunc @ index.js:160
+leadingEdge @ index.js:170
+debounced @ index.js:235
+onChange @ index.js:200
+onChange @ index.js:58
+callCallback @ react-dom.development.js:4164
+invokeGuardedCallbackDev @ react-dom.development.js:4213
+invokeGuardedCallback @ react-dom.development.js:4277
+invokeGuardedCallbackAndCatchFirstError @ react-dom.development.js:4291
+executeDispatch @ react-dom.development.js:9041
+processDispatchQueueItemsInOrder @ react-dom.development.js:9073
+processDispatchQueue @ react-dom.development.js:9086
+dispatchEventsForPlugins @ react-dom.development.js:9097
+（匿名） @ react-dom.development.js:9288
+batchedUpdates$1 @ react-dom.development.js:26179
+batchedUpdates @ react-dom.development.js:3991
+dispatchEventForPluginEventSystem @ react-dom.development.js:9287
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventRep
+lay @ react-dom.development.js:6465
+dispatchEvent @ react-dom.development.js:6457
+dispatchDiscreteEvent @ react-dom.development.js:6430了解此错误
+17:19:14.156 renderer.mjs:1 [Vue2 Renderer] Component mounted successfully
+17:19:14.156 renderer.mjs:1 [Vue2 Renderer] Cleanup called for: undefined
+
+这是defineComponent + setup (return render 
+function)修改的报错，目前只有/Users/wisedu/Documents/GitHub/dumi-theme-lobeh
+ub/vue2-example/docs/vue2/demos/LoginFormSFC.vue是完美的 
+
+⏺ 问题是 @babel/preset-react 会把 JSX 转换成 React.createElement()，但 Vue 2
+   需要使用 h 函数。我需要配置 pragma 为 h 并注入 Vue 的 h 函数：
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 6 additions and 2 removals     
+       77        }
+       78    
+       79        // Use React preset for JSX transformation (available in
+             @babel/standalone)
+       80 +      // Configure pragma to use Vue's h function instead of 
+          + React.createElement
+       81        if (lang === 'tsx' || lang === 'jsx') {
+       82 -        console.log('[Vue2 Compiler] Adding React preset for 
+          -  JSX');
+       83 -        presets.push([availablePresets['react'] ?? 'react', {
+          -  }]);
+       82 +        console.log('[Vue2 Compiler] Adding React preset for 
+          +  JSX with Vue h pragma');
+       83 +        presets.push([availablePresets['react'] ?? 'react', {
+       84 +          pragma: 'h',
+       85 +          pragmaFrag: 'Fragment',
+       86 +        }]);
+       87        }
+       88    
+       89        const { basename } = resolveFilename(filename);
+
+⏺ Now inject the h function from Vue for JSX/TSX files:
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 9 additions and 1 removal      
+       293    
+       294      if (['js', 'jsx', 'ts', 'tsx'].includes(lang)) {
+       295        console.log('[Vue2 Compiler] Transforming non-SFC 
+             file:', lang);
+       296 -      const
+           -   result = compiler.transformTS(code, filename, { lang });
+       296 +      let
+           +   result = compiler.transformTS(code, filename, { lang });
+       297        console.log('[Vue2 Compiler] After transformTS, code 
+             length:', result.length);
+       298 +  
+       299 +      // For JSX/TSX, inject Vue's h function at the 
+           + beginning
+       300 +      // This is needed because we use pragma: 'h' in React 
+           + preset
+       301 +      if (hasJSX) {
+       302 +        console.log('[Vue2 Compiler] Injecting Vue h function
+           +  for JSX');
+       303 +        result = `import { h } from 'vue';\n${result}`;
+       304 +      }
+       305 +  
+       306        // Convert to CommonJS for dumi's evalCommonJS
+       307        const cjsResult = compiler.toCommonJS(result, { hasJSX 
+             });
+       308        console.log('[Vue2 Compiler] After toCommonJS, code 
+             length:', cjsResult?.code?.length);
+
+⏺ Bash(pnpm build:lib)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build:lib /Users/wisedu/Documents/GitHub/du
+    mi-theme-lobehub/packages/preset-vue2
+    > tsup --minify
+    … +39 lines (ctrl+o to expand)
+
+
+⏺ Build 完成。现在 JSX 会被转换为 h() 调用，并自动注入 import { h } from 
+  'vue'。
+
+  测试:
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+
+  测试 TSX 文件。如果 Vue 2.7 的 h
+  函数工作方式不同，请告诉我具体的错误信息。
+
+> [Vue2 Compiler] compile() called: {filename: 
+'docs-components-demo-loginformjsx-index.tsx', lang: 'tsx', hasJSX: true}
+17:22:55.289 compiler.mjs:10 [Vue2 Compiler] Transforming non-SFC file: tsx
+17:22:55.289 compiler.mjs:1 [Vue2 Compiler] transformTS called, lang: tsx
+17:22:55.290 compiler.mjs:1 [Vue2 Compiler] Adding React preset for JSX with
+ Vue h pragma
+17:22:55.290 compiler.mjs:1 [Vue2 Compiler] Babel transform with presets: 
+(2) ['typescript', 'react']
+17:22:55.303 compiler.mjs:10 [Vue2 Compiler] After transformTS, code length:
+ 3831
+17:22:55.303 compiler.mjs:10 [Vue2 Compiler] Injecting Vue h function for 
+JSX
+17:22:55.316 compiler.mjs:11 [Vue2 Compiler] After toCommonJS, code length: 
+4844
+17:22:55.325 renderer.mjs:1 [Vue2 Renderer] render called
+17:22:55.325 renderer.mjs:1 [Vue2 Renderer] Component __id__: undefined
+17:22:55.325 renderer.mjs:1 [Vue2 Renderer] Component __css__ length: 
+undefined
+17:22:55.325 renderer.mjs:1 [Vue2 Renderer] Component data: undefined
+17:22:55.325 renderer.mjs:1 [Vue2 Renderer] Component methods: none
+17:22:55.326 renderer.mjs:1 [Vue2 Renderer] Component mounted successfully
+17:22:55.326 renderer.mjs:1 [Vue2 Renderer] Cleanup called for: undefined
+17:23:01.227 compiler.mjs:10 [Vue2 Compiler] compile() called: {filename: 
+'docs-components-demo-loginformjsx-index.tsx', lang: 'tsx', hasJSX: true}
+17:23:01.227 compiler.mjs:10 [Vue2 Compiler] Transforming non-SFC file: tsx
+17:23:01.227 compiler.mjs:1 [Vue2 Compiler] transformTS called, lang: tsx
+17:23:01.227 compiler.mjs:1 [Vue2 Compiler] Adding React preset for JSX with
+ Vue h pragma
+17:23:01.227 compiler.mjs:1 [Vue2 Compiler] Babel transform with presets: 
+(2) ['typescript', 'react']
+17:23:01.241 compiler.mjs:10 [Vue2 Compiler] After transformTS, code length:
+ 3831
+17:23:01.241 compiler.mjs:10 [Vue2 Compiler] Injecting Vue h function for 
+JSX
+17:23:01.257 compiler.mjs:11 [Vue2 Compiler] After toCommonJS, code length: 
+4844
+17:23:01.265 renderer.mjs:1 [Vue2 Renderer] render called
+17:23:01.265 renderer.mjs:1 [Vue2 Renderer] Component __id__: undefined
+17:23:01.265 renderer.mjs:1 [Vue2 Renderer] Component __css__ length: 
+undefined
+17:23:01.265 renderer.mjs:1 [Vue2 Renderer] Component data: undefined
+17:23:01.265 renderer.mjs:1 [Vue2 Renderer] Component methods: none
+17:23:01.265 renderer.mjs:1 [Vue2 Renderer] Component mounted successfully
+17:23:01.265 renderer.mjs:1 [Vue2 Renderer] Cleanup called for: undefined 
+
+⏺ TSX 编译成功了，但组件属性都是
+  undefined。让我查看一下编译后的代码结构。需要打印更多信息来定位问题：
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 5 additions and 2 removals     
+       295        console.log('[Vue2 Compiler] Transforming non-SFC 
+             file:', lang);
+       296        let result = compiler.transformTS(code, filename, { 
+             lang });
+       297        console.log('[Vue2 Compiler] After transformTS, code 
+             length:', result.length);
+       298 +      console.log('[Vue2 Compiler] After transformTS 
+           + preview:', result.substring(0, 500));
+       299    
+       300        // For JSX/TSX, inject Vue's h function at the 
+             beginning
+       301        // This is needed because we use pragma: 'h' in React 
+             preset
+     ...
+       305    
+       306        // Convert to CommonJS for dumi's evalCommonJS
+       307        const cjsResult = compiler.toCommonJS(result, { hasJSX 
+             });
+       308 -      console.log('[Vue2 Compiler] After toCommonJS, code 
+           - length:', cjsResult?.code?.length);
+       309 -      return cjsResult?.code || '';
+       308 +      const finalCode = cjsResult?.code || '';
+       309 +      console.log('[Vue2 Compiler] After toCommonJS, code 
+           + length:', finalCode.length);
+       310 +      console.log('[Vue2 Compiler] After toCommonJS 
+           + preview:', finalCode.substring(0, 800));
+       311 +      return finalCode;
+       312      }
+       313    
+       314      console.log('[Vue2 Compiler] Compiling SFC:', filename);
+
+⏺ Also add more debug to renderer:
+
+⏺ Update(src/vue2/runtime/renderer.ts)
+  ⎿  Updated src/vue2/runtime/renderer.ts with 5 additions               
+        3    
+        4    const renderer: IDemoCancelableFn = async function (canvas, 
+            component) {
+        5      console.log('[Vue2 Renderer] render called');
+        6 +    console.log('[Vue2 Renderer] Component type:', typeof 
+          + component);
+        7 +    console.log('[Vue2 Renderer] Component:', component);
+        8 +    console.log('[Vue2 Renderer] Component keys:', component ?
+          +  Object.keys(component) : 'none');
+        9      console.log('[Vue2 Renderer] Component __id__:', 
+            component?.__id__);
+       10      console.log('[Vue2 Renderer] Component __css__ length:', 
+            component?.__css__?.length);
+       11      console.log('[Vue2 Renderer] Component data:', 
+            component?.data);
+       12 +    console.log('[Vue2 Renderer] Component render:', 
+          + component?.render);
+       13 +    console.log('[Vue2 Renderer] Component setup:', 
+          + component?.setup);
+       14      console.log('[Vue2 Renderer] Component methods:', 
+            component?.methods ? Object.keys(component.methods) : 
+            'none');
+       15    
+       16      if (!component) {
+
+⏺ Bash(pnpm build:lib)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build:lib /Users/wisedu/Documents/GitHub/du
+    mi-theme-lobehub/packages/preset-vue2
+    > tsup --minify
+    … +39 lines (ctrl+o to expand)
+
+
+⏺ 测试:
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+
+  请分享 TSX 文件编译的详细日志，特别是:
+  - After transformTS preview:
+  - After toCommonJS preview:
+  - Component type: 和 Component keys:
+
+  这样可以看到编译后的代码结构和组件对象。
+
+> renderer.mjs:1 [Vue2 Renderer] render called
+17:24:57.634 renderer.mjs:1 [Vue2 Renderer] Component type: object
+17:24:57.634 renderer.mjs:1 [Vue2 Renderer] Component: {name: 
+'LoginFormJSX', setup: ƒ}
+17:24:57.634 renderer.mjs:1 [Vue2 Renderer] Component keys: (2) ['name', 
+'setup']
+17:24:57.634 renderer.mjs:1 [Vue2 Renderer] Component __id__: undefined
+17:24:57.634 renderer.mjs:1 [Vue2 Renderer] Component __css__ length: 
+undefined
+17:24:57.634 renderer.mjs:1 [Vue2 Renderer] Component data: undefined
+17:24:57.634 renderer.mjs:1 [Vue2 Renderer] Component render: undefined
+17:24:57.634 renderer.mjs:1 [Vue2 Renderer] Component setup: ƒ setup() {
+    var _this = this;
+    var loginFormRef = (0,vue__WEBPACK_IMPORTED_MODULE_4__.ref)(null);
+    var loading = (0,vue__WEBPACK_IMPORTED_MODULE_4__.ref)(false);
+    var formData = (0,vue__WE…
+17:24:57.634 renderer.mjs:1 [Vue2 Renderer] Component methods: none
+17:24:57.644 renderer.mjs:1 [Vue2 Renderer] Component mounted successfully
+17:25:03.664 compiler.mjs:10 [Vue2 Compiler] compile() called: {filename: 
+'docs-components-demo-loginformjsx-index.tsx', lang: 'tsx', hasJSX: true}
+17:25:03.664 compiler.mjs:10 [Vue2 Compiler] Transforming non-SFC file: tsx
+17:25:03.664 compiler.mjs:10 [Vue2 Compiler] Initializing compiler with 
+Babel standalone
+17:25:03.664 compiler.mjs:10 [Vue2 Compiler] Available Babel presets: 
+(13) ['env', 'es2015', 'es2016', 'es2017', 'react', 'stage-0', 'stage-1', 
+'stage-2', 'stage-3', 'es2015-loose', 'es2015-no-commonjs', 'typescript', 
+'flow']
+17:25:03.664 compiler.mjs:1 [Vue2 Compiler] transformTS called, lang: tsx
+17:25:03.664 compiler.mjs:1 [Vue2 Compiler] Adding React preset for JSX with
+ Vue h pragma
+17:25:03.664 compiler.mjs:1 [Vue2 Compiler] Babel transform with presets: 
+(2) ['typescript', 'react']
+17:25:03.681 compiler.mjs:10 [Vue2 Compiler] After transformTS, code length:
+ 3832
+17:25:03.681 compiler.mjs:10 [Vue2 Compiler] After transformTS preview: 
+import { defineComponent, ref, reactive } from 'vue';
+import { Card, Form, FormItem, Input, Select, Option, Button, Message } from
+ 'element-ui';
+import 'element-ui/lib/theme-chalk/index.css';
+export default defineComponent({
+  name: 'LoginFormJSX',
+  setup() {
+    const loginFormRef = ref(null);
+    const loading = ref(false);
+    const formData = reactive({
+      username: '',
+      password: '',
+      region: ''
+    });
+    const rules = {
+      username: [{
+        required: true,
+        mes
+17:25:03.681 compiler.mjs:10 [Vue2 Compiler] Injecting Vue h function for 
+JSX
+17:25:03.696 compiler.mjs:11 [Vue2 Compiler] After toCommonJS, code length: 
+4845
+17:25:03.696 compiler.mjs:11 [Vue2 Compiler] After toCommonJS preview: "use 
+strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports["default"] = void 0;
+var _vue = require("vue");
+var _elementUi = require("element-ui");
+require("element-ui/lib/theme-chalk/index.css");
+var _default = (0, _vue.defineComponent)({
+  name: 'LoginFormJSX',
+  setup: function setup() {
+    var loginFormRef = (0, _vue.ref)(null);
+    var loading = (0, _vue.ref)(false);
+    var formData = (0, _vue.reactive)({
+      username: '',
+      password: '',
+      region: ''
+    });
+    var rules = {
+      username: [{
+        required: true,
+        message: 'Please enter username',
+        trigger: 'blur'
+      }, {
+        min: 3,
+        max: 20,
+        message: 'Length should be 3 to 20 characters',
+        trigger: 'blur'
+      }],
+      password: [{
+        req
+17:25:03.706 renderer.mjs:1 [Vue2 Renderer] render called
+17:25:03.706 renderer.mjs:1 [Vue2 Renderer] Component type: object
+17:25:03.706 renderer.mjs:1 [Vue2 Renderer] Component: {name: 
+'LoginFormJSX', setup: ƒ}
+17:25:03.706 renderer.mjs:1 [Vue2 Renderer] Component keys: (2) ['name', 
+'setup']
+17:25:03.706 renderer.mjs:1 [Vue2 Renderer] Component __id__: undefined
+17:25:03.706 renderer.mjs:1 [Vue2 Renderer] Component __css__ length: 
+undefined
+17:25:03.706 renderer.mjs:1 [Vue2 Renderer] Component data: undefined
+17:25:03.706 renderer.mjs:1 [Vue2 Renderer] Component render: undefined
+17:25:03.706 renderer.mjs:1 [Vue2 Renderer] Component setup: ƒ setup() {
+    var loginFormRef = (0, _vue.ref)(null);
+    var loading = (0, _vue.ref)(false);
+    var formData = (0, _vue.reactive)({
+      username: '',
+      password: '',
+      region: ''
+    });
+…
+17:25:03.706 renderer.mjs:1 [Vue2 Renderer] Component methods: none
+17:25:03.707 renderer.mjs:1 [Vue2 Renderer] Component mounted successfully
+17:25:03.707 renderer.mjs:1 [Vue2 Renderer] Cleanup called for: undefined
+
+目前只展示defineComponent + setup (return render 
+function)，其他的我已经注释了 
+
+⏺ 从日志看，TSX 组件编译成功了！组件结构是 {name: 'LoginFormJSX', setup: 
+  ƒ}，这是正确的 Vue 2.7 Composition API 格式。
+
+  现在请确认：
+  1. TSX 组件是否正常显示？ （不是空白页面？）
+  2. 修改 TSX 代码后能实时更新吗？
+
+  另外，请测试 SFC 文件的 JS/CSS 修改问题：
+  1. 打开 LoginFormSFC.vue
+  2. 修改 <script> 部分（比如修改 data() 里的默认值）
+  3. 修改 <style> 部分（比如改变颜色）
+
+  分享控制台日志，特别是：
+  - [Vue2 Compiler] SFC compiled - JS length:
+  - [Vue2 Compiler] CSS content:
+  - [Vue2 Renderer] Injecting CSS
+
+  这样我可以看到 JS/CSS 是否被正确编译和注入。
+
+> 页面的组件不展示了，只剩下了el-card__body，内部的form没了 
+
+⏺ 明白了，问题是 Vue 2 的 JSX 和 React JSX 语法不同。React preset 的 h(type,
+   props, children) 格式与 Vue 2 的 slot 和事件处理方式不兼容。
+
+  Vue 2 JSX 需要 @vue/babel-preset-jsx，但它在 @babel/standalone 中不可用。
+
+  建议方案：
+
+  1. JSX/TSX 文件暂不支持 live editing - 因为浏览器中没有合适的 Vue 2 JSX
+  转换器
+  2. 专注于 SFC 文件的完整支持 - 这是最常用的 Vue 2 开发方式
+
+  让我先修复 SFC 文件的 JS/CSS 实时更新问题。请测试 LoginFormSFC.vue：
+
+  1. 修改 <script> 部分（比如改变 data 里的值）
+  2. 修改 <style> 部分（比如改变颜色）
+
+  分享控制台日志，看看是否有编译输出。
+
+  另外，对于 JSX/TSX 文件，可以选择：
+  - A: 完全禁用 live editing（只显示静态预览）
+  - B: 保持现状，用户需要刷新页面查看更改
+
+  你想怎么处理 JSX/TSX？
+
+> 浏览器中没有合适的 Vue 2 JSX转换器？那是不是我们可以参考bable的代码写一个
+呢？@vue/babel-preset-jsx不可以用吗，要不要看看参考项目preset-vue2/Users/wis
+edu/FEProjects/WisFE/wis-design-v2/packages/preset-vue2 
+
+⏺ 好主意！让我看看参考项目是怎么处理的：
+
+⏺ Search(pattern: "**/*", path:
+        "~/FEProjects/WisFE/wis-design-v2/packages/preset-vue2")
+  ⎿  Found 100 files (ctrl+o to expand)
+  ⎿ API Error: 500 
+    {"type":"error","error":{"type":"api_error","message":"Internal server 
+    error"},"request_id":"req_011CVUNbFbzsBwD2e8dmnVgf"}
+
+> 继续 
+
+⏺ Read(~/FEProjects/WisFE/wis-design-v2/packages/preset-vue2/src/compiler/browse
+      r.ts)
+  ⎿  Read 87 lines
+
+⏺ Read(~/FEProjects/WisFE/wis-design-v2/packages/preset-vue2/src/compiler/index.
+      ts)
+  ⎿  Read 196 lines
+
+⏺ Read(~/FEProjects/WisFE/wis-design-v2/packages/preset-vue2/package.json)
+  ⎿  Read 39 lines
+
+⏺ 我看到参考项目使用了 @vue/babel-preset-jsx，但在 browser.ts
+  中也是注释掉的，说明他们也遇到同样的问题。
+
+  让我看看能否将 @vue/babel-preset-jsx 打包到浏览器中使用。先检查一下我们的
+  tsup 配置：
+
+⏺ Read(tsup.config.ts)
+  ⎿  Read 51 lines
+
+⏺ 我有个想法！我们可以写一个包装函数，将 React 风格的 JSX 转换为 Vue 2
+  风格：
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 51 additions and 4 removals    
+       297        console.log('[Vue2 Compiler] After transformTS, code 
+             length:', result.length);
+       298        console.log('[Vue2 Compiler] After transformTS 
+             preview:', result.substring(0, 500));
+       299    
+       300 -      // For JSX/TSX, inject Vue's h function at the 
+           - beginning
+       301 -      // This is needed because we use pragma: 'h' in React 
+           - preset
+       300 +      // For JSX/TSX, inject a wrapper h function that 
+           + converts React-style props to Vue-style
+       301 +      // This is needed because @babel/preset-react outputs 
+           + React-style JSX calls
+       302        if (hasJSX) {
+       303 -        console.log('[Vue2 Compiler] Injecting Vue h function
+           -   for JSX');
+       304 -        result = `import { h } from 'vue';\n${result}`;
+       303 +        console.log('[Vue2 Compiler] Injecting Vue h wrapper
+           +   for JSX');
+       304 +        // This wrapper converts React-style props (onClick, 
+           + className) to Vue-style (on: {click}, class)
+       305 +        const vueHWrapper = `
+       306 +  import Vue from 'vue';
+       307 +  var _vueH = Vue.h || Vue.prototype.$createElement || 
+           + function(t,d,c){return {tag:t,data:d,children:c}};
+       308 +  function h(type, props) {
+       309 +    var children = [];
+       310 +    for (var i = 2; i < arguments.length; i++) {
+       311 +      children = children.concat(arguments[i]);
+       312 +    }
+       313 +    if (!props || typeof props !== 'object' || 
+           + Array.isArray(props)) {
+       314 +      if (props !== null && props !== undefined) {
+       315 +        children = [props].concat(children);
+       316        }
+       317 +      return _vueH(type, {}, children.length === 1 ? 
+           + children[0] : children);
+       318 +    }
+       319 +    var vueData = { attrs: {}, on: {}, class: [], style: {} 
+           + };
+       320 +    Object.keys(props).forEach(function(key) {
+       321 +      var val = props[key];
+       322 +      if (key === 'className' || key === 'class') {
+       323 +        vueData.class = val;
+       324 +      } else if (key === 'style') {
+       325 +        vueData.style = val;
+       326 +      } else if (key.slice(0,2) === 'on' && key.length > 2 &&
+           +  typeof val === 'function') {
+       327 +        var eventName = key[2].toLowerCase() + key.slice(3);
+       328 +        vueData.on[eventName] = val;
+       329 +      } else if (key === 'key') {
+       330 +        vueData.key = val;
+       331 +      } else if (key === 'ref') {
+       332 +        vueData.ref = val;
+       333 +      } else if (key === 'slot') {
+       334 +        vueData.slot = val;
+       335 +      } else if (key === 'domProps' || key === 
+           + 'domPropsInnerHTML') {
+       336 +        vueData.domProps = vueData.domProps || {};
+       337 +        if (key === 'domPropsInnerHTML') 
+           + vueData.domProps.innerHTML = val;
+       338 +        else Object.assign(vueData.domProps, val);
+       339 +      } else {
+       340 +        vueData.attrs[key] = val;
+       341 +      }
+       342 +    });
+       343 +    var flatChildren = [];
+       344 +    children.forEach(function(c) {
+       345 +      if (Array.isArray(c)) flatChildren = 
+           + flatChildren.concat(c);
+       346 +      else if (c !== null && c !== undefined && c !== false) 
+           + flatChildren.push(c);
+       347 +    });
+       348 +    return _vueH(type, vueData, flatChildren.length === 1 ? 
+           + flatChildren[0] : flatChildren);
+       349 +  }
+       350 +  `;
+       351 +        result = vueHWrapper + result;
+       352 +      }
+       353    
+       354        // Convert to CommonJS for dumi's evalCommonJS
+       355        const cjsResult = compiler.toCommonJS(result, { hasJSX 
+             });
+
+⏺ Bash(pnpm build:lib)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build:lib /Users/wisedu/Documents/GitHub/du
+    mi-theme-lobehub/packages/preset-vue2
+    > tsup --minify
+    … +39 lines (ctrl+o to expand)
+
+
+⏺ Build 成功。我添加了一个 h 包装函数，它会将 React 风格的 props 转换为 Vue
+  2 风格：
+
+  - className → class
+  - onClick → on: { click }
+  - 其他 props → attrs
+
+  测试:
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+
+  测试 TSX 组件，看看表单是否正常显示了。
+
+> 修改一下，组件完全没了 
+  ⎿  Interrupted · What should Claude do instead?
+
+> 修改一下，组件完全没了，而且我认为这个方法不好，先和我说一下为什么不成功 
+
+⏺ 你说得对，让我解释为什么这个方法不成功：
+
+  问题分析
+
+  1. Vue 2 的 h 函数签名不同
+
+  Vue 2 的 h 函数（即 $createElement）只在组件实例的 render 函数内部可用：
+  // Vue 2 正确用法
+  export default {
+    render(h) {  // h 是参数，由 Vue 注入
+      return h('div', { class: 'foo' }, 'hello')
+    }
+  }
+
+  2. Vue 2.7 的 Composition API h 不同
+
+  Vue 2.7 虽然有 import { h } from 'vue'，但它的工作方式与 Vue 3
+  不完全相同，且在 setup 返回渲染函数时有特殊要求。
+
+  3. 组件解析问题
+
+  React JSX 直接传递组件构造函数：h(Card, props)，但 Vue 2
+  需要组件在特定上下文中被解析。
+
+  4. @vue/babel-preset-jsx 做了很多特殊处理
+
+  - 自动注入 h 到 render 函数作用域
+  - 处理 v-model、v-on、slot 等指令
+  - 正确处理组件注册和解析
+
+  可行方案
+
+  | 方案                                | 复杂度 | 可行性       |
+  |-----------------------------------|-----|-----------|
+  | A. JSX/TSX 禁用 live editing        | 低   | ✅ 最稳定     |
+  | B. 将 @vue/babel-preset-jsx 打包到浏览器 | 高   | ⚠️ 需要大量工作 |
+  | C. 只支持 SFC 文件的 live editing       | 低   | ✅ 实用      |
+
+  你倾向于哪个方案？ 我建议先专注于让 SFC 完美工作（包括 JS/CSS
+  实时更新），JSX/TSX 暂时只做静态预览。
+
+> 我倾向于方案b，但是你说需要大量工作，能大概说一下有哪些吗 
+
+⏺ 方案 B：将 @vue/babel-preset-jsx 打包到浏览器
+
+  需要的工作
+
+  1. 分析 @vue/babel-preset-jsx 依赖链
+
+  @vue/babel-preset-jsx
+  ├── @vue/babel-plugin-transform-vue-jsx (核心转换)
+  │   ├── @babel/plugin-syntax-jsx
+  │   └── @vue/babel-helper-vue-jsx-merge-props
+  ├── @vue/babel-sugar-composition-api-inject-h (自动注入h)
+  ├── @vue/babel-sugar-composition-api-render-instance
+  ├── @vue/babel-sugar-functional-vue (函数式组件)
+  ├── @vue/babel-sugar-inject-h (注入h到render)
+  ├── @vue/babel-sugar-v-model (v-model支持)
+  └── @vue/babel-sugar-v-on (v-on支持)
+
+  2. 具体工作项
+
+  | 任务                    | 工作量 | 说明
+  |
+  |-----------------------|-----|------------------------------------|
+  | 打包插件为浏览器版本            | 中   | 用 rollup/webpack 打包，处理
+  Node.js API |
+  | 注册到 @babel/standalone | 低   | 使用 Babel.registerPlugin()          |
+  | 处理 Node.js 特定代码       | 中   | 替换 require()、path 等
+      |
+  | 添加到 HTML head scripts | 低   | 类似 @babel/standalone 的加载方式
+      |
+  | 测试各种 JSX 场景           | 中   | v-model、slots、events 等
+     |
+
+  3. 预计文件大小
+
+  - @vue/babel-preset-jsx 打包后约 30-50KB (gzip 后约 10-15KB)
+
+  4. 潜在风险
+
+  - 某些 Babel 插件内部使用 Node.js API，需要 polyfill
+  - 版本兼容性问题
+  - 可能需要修改插件源码
+
+  要不要试试？
+
+  我可以先尝试打包核心的 @vue/babel-plugin-transform-vue-jsx，这是最重要的部
+  分。如果成功，再逐步添加其他 sugar 插件。
+
+  预计时间：需要 1-2 小时的探索和调试
+
+  你想让我开始尝试吗？
+
+> 我认为不需要了吧，我倾向于方案c，只支持 SFC 文件的 live 
+editing，支持SFC+TS&SFC+TS+setup这两种，jsx/tsx的不支持在线编辑 
+
+⏺ 好的，方案 C 最实用。让我整理一下：
+
+⏺ 先移除 JSX/TSX live editing，返回提示信息：
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  File must be read first
+
+⏺ Read(src/compiler/browser.ts)
+  ⎿  Read 398 lines
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 22 additions and 63 removals   
+       291    
+       292      console.log('[Vue2 Compiler] compile() called:', { 
+             filename, lang: lang || 'unknown', hasJSX });
+       293    
+       294 +    // JS/JSX/TS/TSX files: live editing not supported
+       295 +    // Only .vue SFC files support live editing
+       296      if (['js', 'jsx', 'ts', 'tsx'].includes(lang)) {
+       297 -      console.log('[Vue2 Compiler] Transforming non-SFC file
+           -  :', lang);
+       298 -      let result = compiler.transformTS(code, filename, { 
+           - lang });
+       299 -      console.log('[Vue2 Compiler] After transformTS, code 
+           - length:', result.length);
+       300 -      console.log('[Vue2 Compiler] After transformTS 
+           - preview:', result.substring(0, 500));
+       301 -  
+       302 -      // For JSX/TSX, inject a wrapper h function that 
+           - converts React-style props to Vue-style
+       303 -      // This is needed because @babel/preset-react outputs 
+           - React-style JSX calls
+       304 -      if (hasJSX) {
+       305 -        console.log('[Vue2 Compiler] Injecting Vue h wrapper 
+           - for JSX');
+       306 -        // This wrapper converts React-style props (onClick, 
+           - className) to Vue-style (on: {click}, class)
+       307 -        const vueHWrapper = `
+       308 -  import Vue from 'vue';
+       309 -  var _vueH = Vue.h || Vue.prototype.$createElement || 
+           - function(t,d,c){return {tag:t,data:d,children:c}};
+       310 -  function h(type, props) {
+       311 -    var children = [];
+       312 -    for (var i = 2; i < arguments.length; i++) {
+       313 -      children = children.concat(arguments[i]);
+       297 +      console.log('[Vue2 Compiler] Non-SFC file
+           +  , live editing not supported:', filename);
+       298 +      return `
+       299 +  module.exports = {
+       300 +    name: 'LiveEditNotSupported',
+       301 +    render: function(h) {
+       302 +      return h('div', {
+       303 +        style: {
+       304 +          padding: '16px',
+       305 +          background: '#fff3cd',
+       306 +          border: '1px solid #ffc107',
+       307 +          borderRadius: '4px',
+       308 +          color: '#856404',
+       309 +          fontSize: '14px'
+       310 +        }
+       311 +      }, [
+       312 +        h('div', { style: { fontWeight: 'bold', marginBottom:
+           +  '8px' } }, 'Live editing is not supported for .' + 
+           + '${lang}' + ' files'),
+       313 +        h('div', {}, 'Only .vue SFC files support live 
+           + editing. Please modify the source file and refresh.')
+       314 +      ]);
+       315      }
+       316 -    if (!props || typeof props !== 'object' || 
+           - Array.isArray(props)) {
+       317 -      if (props !== null && props !== undefined) {
+       318 -        children = [props].concat(children);
+       319 -      }
+       320 -      return _vueH(type, {}, children.length === 1 ? 
+           - children[0] : children);
+       321 -    }
+       322 -    var vueData = { attrs: {}, on: {}, class: [], style: {} 
+           - };
+       323 -    Object.keys(props).forEach(function(key) {
+       324 -      var val = props[key];
+       325 -      if (key === 'className' || key === 'class') {
+       326 -        vueData.class = val;
+       327 -      } else if (key === 'style') {
+       328 -        vueData.style = val;
+       329 -      } else if (key.slice(0,2) === 'on' && key.length > 2 &&
+           -  typeof val === 'function') {
+       330 -        var eventName = key[2].toLowerCase() + key.slice(3);
+       331 -        vueData.on[eventName] = val;
+       332 -      } else if (key === 'key') {
+       333 -        vueData.key = val;
+       334 -      } else if (key === 'ref') {
+       335 -        vueData.ref = val;
+       336 -      } else if (key === 'slot') {
+       337 -        vueData.slot = val;
+       338 -      } else if (key === 'domProps' || key === 
+           - 'domPropsInnerHTML') {
+       339 -        vueData.domProps = vueData.domProps || {};
+       340 -        if (key === 'domPropsInnerHTML') 
+           - vueData.domProps.innerHTML = val;
+       341 -        else Object.assign(vueData.domProps, val);
+       342 -      } else {
+       343 -        vueData.attrs[key] = val;
+       344 -      }
+       345 -    });
+       346 -    var flatChildren = [];
+       347 -    children.forEach(function(c) {
+       348 -      if (Array.isArray(c)) flatChildren = 
+           - flatChildren.concat(c);
+       349 -      else if (c !== null && c !== undefined && c !== false) 
+           - flatChildren.push(c);
+       350 -    });
+       351 -    return _vueH(type, vueData, flatChildren.length === 1 ? 
+           - flatChildren[0] : flatChildren);
+       352 -  }
+       316 +  };
+       317 +  module.exports.default = module.exports;
+       318    `;
+       319 -        result = vueHWrapper + result;
+       320 -      }
+       321 -  
+       322 -      // Convert to CommonJS for dumi's evalCommonJS
+       323 -      const cjsResult = compiler.toCommonJS(result, { hasJSX 
+           - });
+       324 -      const finalCode = cjsResult?.code || '';
+       325 -      console.log('[Vue2 Compiler] After toCommonJS, code 
+           - length:', finalCode.length);
+       326 -      console.log('[Vue2 Compiler] After toCommonJS 
+           - preview:', finalCode.substring(0, 800));
+       327 -      return finalCode;
+       319      }
+       320    
+       321      console.log('[Vue2 Compiler] Compiling SFC:', filename);
+
+⏺ 清理不需要的 JSX 相关代码：
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 1 addition and 2 removals      
+       287      const [, lang] = filename.match(/[^.]+\.([^.]+)$/) || [];
+       288      // Generate id from filename
+       289      const id = filename.replace(/[^a-zA-Z0-9]/g, '_');
+       290 -    const hasJSX = lang === 'jsx' || lang === 'tsx';
+       290    
+       291 -    console.log('[Vue2 Compiler] compile() called:', { 
+           -  filename, lang: lang || 'unknown', hasJSX });
+       291 +    console.log('[Vue2 Compiler] compile() called:', { 
+           +  filename, lang: lang || 'unknown' });
+       292    
+       293      // JS/JSX/TS/TSX files: live editing not supported
+       294      // Only .vue SFC files support live editing
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 1 addition and 5 removals    
+       338      // Add ES module export so toCommonJS can convert it
+       339      js += `\nexport default ${COMP_IDENTIFIER};`;
+       340    
+       341 -    // Check if SFC script contains JSX
+       342 -    const sfcHasJSX = 
+           - /<script[^>]*\slang=["'](jsx|tsx)["']/.test(code);
+       343 -    console.log('[Vue2 Compiler] SFC has JSX:', sfcHasJSX);
+       344 -  
+       341      // Convert entire output to CommonJS (including the ES 
+             imports in script content)
+       342 -    const cjsResult = compiler.toCommonJS(js
+           -  , { hasJSX: sfcHasJSX });
+       342 +    const cjsResult = compiler.toCommonJS(js);
+       343      const finalCode = cjsResult?.code || js;
+       344    
+       345      console.log('[Vue2 Compiler] Final code length:', 
+             finalCode.length);
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 5 additions and 8 removals     
+       43      availablePlugins = {},
+       44      availablePresets = {},
+       45    }: CreateCompilerContext) {
+       46 -    // Convert ES modules to CommonJS, with JSX support
+       47 -    function toCommonJS(es: string
+          -  , options: { hasJSX?: boolean } = {}) {
+       48 -      const presets: any[] = [[availablePresets['env'] ?? 
+          - 'env', { modules: 'cjs' }]];
+       49 -      // Add React preset for JSX support if needed
+       50 -      if (options.hasJSX) {
+       51 -        presets.unshift([availablePresets['react'] ?? 'react',
+          -  {}]);
+       52 -      }
+       46 +    // Convert ES modules to CommonJS
+       47 +    function toCommonJS(es: string) {
+       48        // @babel/standalone uses transform (not transformSync) 
+            in browser
+       49 -      return babel.transform(es, { presets });
+       49 +      return babel.transform(es, {
+       50 +        presets: [[availablePresets['env'] ?? 'env', { 
+          + modules: 'cjs' }]],
+       51 +      });
+       52      }
+       53    
+       54      function transformTS(
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 3 additions and 14 removals    
+       64    
+       65        console.log('[Vue2 Compiler] transformTS called, lang:',
+             lang);
+       66    
+       67 -      if (lang === 'ts' || lang === 'tsx') {
+       68 -        const isTSX = lang === 'tsx';
+       69 -        // IMPORTANT: allExtensions must be true for Vue SFC 
+          - files
+       67 +      // Add TypeScript preset if needed
+       68 +      if (lang === 'ts') {
+       69          presets.push([
+       70            availablePresets['typescript'] ?? 'typescript',
+       71 -          { isTSX, 
+          -  allExtensions: true, onlyRemoveTypeImports: true },
+       71 +          { 
+          +  allExtensions: true, onlyRemoveTypeImports: true },
+       72          ]);
+       73        }
+       74    
+       75 -      // Use React preset for JSX transformation (available in
+          -  @babel/standalone)
+       76 -      // Configure pragma to use Vue's h function instead of 
+          - React.createElement
+       77 -      if (lang === 'tsx' || lang === 'jsx') {
+       78 -        console.log('[Vue2 Compiler] Adding React preset for 
+          - JSX with Vue h pragma');
+       79 -        presets.push([availablePresets['react'] ?? 'react', {
+       80 -          pragma: 'h',
+       81 -          pragmaFrag: 'Fragment',
+       82 -        }]);
+       83 -      }
+       84 -  
+       75        const { basename } = resolveFilename(filename);
+       76        console.log('[Vue2 Compiler] Babel transform with 
+            presets:', presets.map(p => Array.isArray(p) ? p[0] : p));
+       77    
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 1 removal                   
+       248          availablePresets: {
+       249            env: 'env',
+       250            typescript: 'typescript',
+       251 -          react: 'react', // For JSX support in toCommonJS
+       251          },
+       252        });
+       253      }
+
+⏺ Now rebuild:
+
+⏺ Bash(pnpm build:lib)
+  ⎿  Error: Exit code 254
+     undefined
+      ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command "build:lib" not found
+
+     Did you mean "pnpm build"?
+
+⏺ Bash(cd /Users/wisedu/Documents/GitHub/dumi-theme-lobehub/packages/preset-vue2
+       && pnpm build:lib)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build:lib /Users/wisedu/Documents/GitHub/du
+    mi-theme-lobehub/packages/preset-vue2
+    > tsup --minify
+    … +39 lines (ctrl+o to expand)
+
+
+⏺ Build 成功！现在请测试：
+
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+
+  测试步骤：
+  1. JSX/TSX 文件应该显示"不支持 live editing"的提示
+  2. 打开 LoginFormSFC.vue，修改 <script> 部分（比如 data 里的值）
+  3. 修改 <style> 部分（比如改变颜色）
+
+  请分享 SFC 修改时的控制台日志，特别是：
+  - [Vue2 Compiler] SFC compiled - JS length:
+  - [Vue2 Compiler] CSS content:
+  - [Vue2 Renderer] 相关日志
+
+  这样我可以定位 JS/CSS 不更新的问题。
+
+> [Vue warn]: Failed to mount component: template or render function not 
+defined.
+
+found in
+
+---> <Anonymous>
+       <Root>
+组件直接没了不是应该给出提示的吗 
+  ⎿  Interrupted · What should Claude do instead?
+
+> [Vue warn]: Failed to mount component: template or render function not 
+defined.
+
+found in
+
+---> <Anonymous>
+       <Root>
+组件直接没了不是应该给出提示的吗 
+
+⏺ 问题是字符串模板中的 ${lang} 没有正确插值。让我修复：
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 5 additions and 3 removals     
+       280      if (['js', 'jsx', 'ts', 'tsx'].includes(lang)) {
+       281        console.log('[Vue2 Compiler] Non-SFC file, live editing
+              not supported:', filename);
+       282        return `
+       283 -  module.exports = {
+       283 +  "use strict";
+       284 +  var _component = {
+       285      name: 'LiveEditNotSupported',
+       286      render: function(h) {
+       287        return h('div', {
+     ...
+       293            fontSize: '14px'
+       294          }
+       295        }, [
+       296 -        h('div', { style: { fontWeight: 'bold', marginBottom:
+           -   '8px' } }, 'Live editing is not supported for .' + '
+           -  ${lang}' + ' files'),
+       296 +        h('div', { style: { fontWeight: 'bold', marginBottom:
+           +   '8px' } }, 'Live editing is not supported for .${lang} 
+           +  files'),
+       297          h('div', {}, 'Only .vue SFC files support live 
+             editing. Please modify the source file and refresh.')
+       298        ]);
+       299      }
+       300    };
+       301 -  module.exports.default = module.exports;
+       301 +  module.exports = _component;
+       302 +  module.exports.default = _component;
+       303    `;
+       304      }
+       305    
+
+⏺ 等等，${lang} 仍然没有被正确插值。让我修复：
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 1 addition and 1 removal       
+       294            fontSize: '14px'
+       295          }
+       296        }, [
+       297 -        h('div', { style: { fontWeight: 'bold', marginBottom:
+           -   '8px' } }, 'Live editing is not supported for .${lang} 
+           -  files'),
+       297 +        h('div', { style: { fontWeight: 'bold', marginBottom:
+           +   '8px' } }, 'Live editing is not supported for .' + lang 
+           +  + ' files'),
+       298          h('div', {}, 'Only .vue SFC files support live 
+             editing. Please modify the source file and refresh.')
+       299        ]);
+       300      }
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 1 addition and 1 removal       
+       294            fontSize: '14px'
+       295          }
+       296        }, [
+       297 -        h('div', { style: { fontWeight: 'bold', marginBottom:
+           -   '8px' } }, 'Live editing is not supported for .' + lang + 
+           -  ' files'),
+       297 +        h('div', { style: { fontWeight: 'bold', marginBottom:
+           +   '8px' } }, 'Live editing is not supported for .` + lang + 
+           +  ` files'),
+       298          h('div', {}, 'Only .vue SFC files support live 
+             editing. Please modify the source file and refresh.')
+       299        ]);
+       300      }
+
+⏺ 让我重新写这部分代码，使用正确的模板字符串插值：
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 22 additions and 23 removals   
+       279      // Only .vue SFC files support live editing
+       280      if (['js', 'jsx', 'ts', 'tsx'].includes(lang)) {
+       281        console.log('[Vue2 Compiler] Non-SFC file, live editing
+              not supported:', filename);
+       282 -      return `
+       283 -  "use strict";
+       284 -  var _component = {
+       285 -    name: 'LiveEditNotSupported',
+       286 -    render: function(h) {
+       287 -      return h('div', {
+       288 -        style: {
+       289 -          padding: '16px',
+       290 -          background: '#fff3cd',
+       291 -          border: '1px solid #ffc107',
+       292 -          borderRadius: '4px',
+       293 -          color: '#856404',
+       294 -          fontSize: '14px'
+       295 -        }
+       296 -      }, [
+       297 -        h('div', { style: { fontWeight: 'bold'
+           -  , marginBottom: '8px' } }, 'Live 
+           -  editing is not supported for .` + lang + ` files'),
+       298 -        h('div', {}, '
+           -  Only .vue SFC files support live editing. Please modify the
+           -   source file and refresh.')
+       299 -      ]);
+       282 +      const notSupportedMsg = `Live editing is not supported 
+           + for .${lang} files`;
+       283 +      return '"use strict";\n' +
+       284 +        'var _component = {\n' +
+       285 +        '  name: "LiveEditNotSupported",\n' +
+       286 +        '  render: function(h) {\n' +
+       287 +        '    return h("div", {\n' +
+       288 +        '      style: {\n' +
+       289 +        '        padding: "16px",\n' +
+       290 +        '        background: "#fff3cd",\n' +
+       291 +        '        border: "1px solid #ffc107",\n' +
+       292 +        '        borderRadius: "4px",\n' +
+       293 +        '        color: "#856404",\n' +
+       294 +        '        fontSize: "14px"\n' +
+       295 +        '      }\n' +
+       296 +        '    }, [\n' +
+       297 +        '      h("div", { style: { fontWeight: "bold"
+           +  , marginBottom: "8px" } }, "' + notSupportedMsg + '"),\n' +
+       298 +        '      h("div", {}, "
+           +  Only .vue SFC files support live editing. Please modify the
+           +   source file and refresh.")\n' +
+       299 +        '    ]);\n' +
+       300 +        '  }\n' +
+       301 +        '};\n' +
+       302 +        'module.exports = _component;\n' +
+       303 +        'module.exports.default = _component;\n';
+       304      }
+       305 -  };
+       306 -  module.exports = _component;
+       307 -  module.exports.default = _component;
+       308 -  `;
+       309 -    }
+       305    
+       306      console.log('[Vue2 Compiler] Compiling SFC:', filename);
+       307      const compiled = compiler.compileSFC({ id, filename, code
+              });
+
+⏺ Bash(pnpm build:lib)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build:lib /Users/wisedu/Documents/GitHub/du
+    mi-theme-lobehub/packages/preset-vue2
+    > tsup --minify
+    … +39 lines (ctrl+o to expand)
+
+
+⏺ Build 成功！
+
+  测试：
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+
+  现在：
+  1. JSX/TSX 文件应该显示黄色提示框说明不支持 live editing
+  2. 测试 SFC 文件（LoginFormSFC.vue）的 JS/CSS 修改，并分享控制台日志
+
+> /Users/wisedu/Documents/GitHub/dumi-theme-lobehub/vue2-example/docs/vue2/d
+emos/LoginFormSFC.vue，[Vue2 Compiler] compile() called: {filename: 
+'docs-components-demo-loginformsfc-index.vue', lang: 'vue'}
+17:45:02.102 compiler.mjs:31 [Vue2 Compiler] Compiling SFC: 
+docs-components-demo-loginformsfc-index.vue
+17:45:02.102 compiler.mjs:10 [Vue2 Compiler] Initializing compiler with 
+Babel standalone
+17:45:02.102 compiler.mjs:10 [Vue2 Compiler] Available Babel presets: 
+(13) ['env', 'es2015', 'es2016', 'es2017', 'react', 'stage-0', 'stage-1', 
+'stage-2', 'stage-3', 'es2015-loose', 'es2015-no-commonjs', 'typescript', 
+'flow']
+17:45:02.103 compiler.mjs:1 [Vue2 Compiler] transformTS called, lang: ts
+17:45:02.103 compiler.mjs:1 [Vue2 Compiler] Babel transform with presets: 
+['typescript']
+17:45:02.136 compiler.mjs:1 [Vue2 Compiler] transformTS called, lang: js
+17:45:02.136 compiler.mjs:1 [Vue2 Compiler] Babel transform with presets: []
+17:45:02.141 compiler.mjs:31 [Vue2 Compiler] SFC compiled - JS length: 4465 
+CSS length: 112
+17:45:02.141 compiler.mjs:31 [Vue2 Compiler] CSS content: 
+.login-form-card[data-v-docs_components_demo_loginformsfc_index_vue] {
+  max-width: 400px;
+  margin: 20px 0;
+}
+
+17:45:02.155 compiler.mjs:34 [Vue2 Compiler] Final code length: 5245
+17:45:02.155 compiler.mjs:34 [Vue2 Compiler] Final code preview: "use 
+strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports["default"] = void 0;
+var _vue = _interopRequireDefault(require("vue"));
+var _elementUi = require("element-ui");
+require("element-ui/lib/theme-chalk/index.css");
+function _interopRequireDefault(obj) { return obj &
+17:45:02.166 renderer.mjs:1 [Vue2 Renderer] render called
+17:45:02.166 renderer.mjs:1 [Vue2 Renderer] Component type: object
+17:45:02.166 renderer.mjs:1 [Vue2 Renderer] Component: {components: {…}, 
+directives: {…}, filters: {…}, name: 'LoginFormSFC', _base: ƒ, …}
+17:45:02.166 renderer.mjs:1 [Vue2 Renderer] Component keys: 
+(12) ['components', 'directives', 'filters', '_base', 'name', 'data', 
+'methods', '_Ctor', 'render', '_scopeId', '__css__', '__id__']
+17:45:02.166 renderer.mjs:1 [Vue2 Renderer] Component __id__: 
+docs_components_demo_loginformsfc_index_vue
+17:45:02.166 renderer.mjs:1 [Vue2 Renderer] Component __css__ length: 112
+17:45:02.166 renderer.mjs:1 [Vue2 Renderer] Component data: ƒ data() {
+    return {
+      loading: false,
+      formData: {
+        username: '',
+        password: '',
+        region: ''
+      },
+      rules: {
+        username: [{
+          required: true,
+   …
+17:45:02.166 renderer.mjs:1 [Vue2 Renderer] Component render: ƒ render() {
+  var _vm = this;
+  var _h = _vm.$createElement;
+  var _c = _vm._self._c || _h;
+  return _c('el-card', {
+    staticClass: "login-form-card"
+  }, [_c('div', {
+    attrs: {
+      "slot": "he…
+17:45:02.166 renderer.mjs:1 [Vue2 Renderer] Component setup: undefined
+17:45:02.166 renderer.mjs:1 [Vue2 Renderer] Component methods: 
+(2) ['handleSubmit', 'handleReset']
+17:45:02.166 renderer.mjs:1 [Vue2 Renderer] Injecting CSS, first 100 chars: 
+.login-form-card[data-v-docs_components_demo_loginformsfc_index_vue] {
+  max-width: 400px;
+  margin
+17:45:02.166 renderer.mjs:1 [Vue2 Renderer] Removing old styles, count: 0
+17:45:02.170 renderer.mjs:1 [Vue2 Renderer] Component mounted successfully
+17:45:02.171 renderer.mjs:1 [Vue2 Renderer] Cleanup called for: undefined
+17:45:07.862 compiler.mjs:10 [Vue2 Compiler] compile() called: {filename: 
+'docs-components-demo-loginformsfc-index.vue', lang: 'vue'}
+17:45:07.862 compiler.mjs:31 [Vue2 Compiler] Compiling SFC: 
+docs-components-demo-loginformsfc-index.vue
+17:45:07.863 compiler.mjs:1 [Vue2 Compiler] transformTS called, lang: ts
+17:45:07.863 compiler.mjs:1 [Vue2 Compiler] Babel transform with presets: 
+['typescript']
+17:45:07.873 compiler.mjs:1 [Vue2 Compiler] transformTS called, lang: js
+17:45:07.873 compiler.mjs:1 [Vue2 Compiler] Babel transform with presets: []
+17:45:07.876 compiler.mjs:31 [Vue2 Compiler] SFC compiled - JS length: 4465 
+CSS length: 113
+17:45:07.876 compiler.mjs:31 [Vue2 Compiler] CSS content: 
+.login-form-card[data-v-docs_components_demo_loginformsfc_index_vue] {
+  max-width: 1400px;
+  margin: 20px 0;
+}
+
+17:45:07.890 compiler.mjs:34 [Vue2 Compiler] Final code length: 5246
+17:45:07.890 compiler.mjs:34 [Vue2 Compiler] Final code preview: "use 
+strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports["default"] = void 0;
+var _vue = _interopRequireDefault(require("vue"));
+var _elementUi = require("element-ui");
+require("element-ui/lib/theme-chalk/index.css");
+function _interopRequireDefault(obj) { return obj &
+17:45:07.898 renderer.mjs:1 [Vue2 Renderer] render called
+17:45:07.898 renderer.mjs:1 [Vue2 Renderer] Component type: object
+17:45:07.898 renderer.mjs:1 [Vue2 Renderer] Component: {components: {…}, 
+directives: {…}, filters: {…}, name: 'LoginFormSFC', _base: ƒ, …}
+17:45:07.898 renderer.mjs:1 [Vue2 Renderer] Component keys: 
+(12) ['components', 'directives', 'filters', '_base', 'name', 'data', 
+'methods', '_Ctor', 'render', '_scopeId', '__css__', '__id__']
+17:45:07.898 renderer.mjs:1 [Vue2 Renderer] Component __id__: 
+docs_components_demo_loginformsfc_index_vue
+17:45:07.898 renderer.mjs:1 [Vue2 Renderer] Component __css__ length: 113
+17:45:07.898 renderer.mjs:1 [Vue2 Renderer] Component data: ƒ data() {
+    return {
+      loading: false,
+      formData: {
+        username: '',
+        password: '',
+        region: ''
+      },
+      rules: {
+        username: [{
+          required: true,
+   …
+17:45:07.899 renderer.mjs:1 [Vue2 Renderer] Component render: ƒ render() {
+  var _vm = this;
+  var _h = _vm.$createElement;
+  var _c = _vm._self._c || _h;
+  return _c('el-card', {
+    staticClass: "login-form-card"
+  }, [_c('div', {
+    attrs: {
+      "slot": "he…
+17:45:07.899 renderer.mjs:1 [Vue2 Renderer] Component setup: undefined
+17:45:07.899 renderer.mjs:1 [Vue2 Renderer] Component methods: 
+(2) ['handleSubmit', 'handleReset']
+17:45:07.899 renderer.mjs:1 [Vue2 Renderer] Injecting CSS, first 100 chars: 
+.login-form-card[data-v-docs_components_demo_loginformsfc_index_vue] {
+  max-width: 1400px;
+  margi
+17:45:07.899 renderer.mjs:1 [Vue2 Renderer] Removing old styles, count: 1
+17:45:07.902 renderer.mjs:1 [Vue2 Renderer] Component mounted successfully
+17:45:07.903 renderer.mjs:1 [Vue2 Renderer] Cleanup called for: 
+docs_components_demo_loginformsfc_index_vue
+17:45:11.845 compiler.mjs:10 [Vue2 Compiler] compile() called: {filename: 
+'docs-components-demo-loginformsfc-index.vue', lang: 'vue'}
+17:45:11.846 compiler.mjs:31 [Vue2 Compiler] Compiling SFC: 
+docs-components-demo-loginformsfc-index.vue
+17:45:11.846 compiler.mjs:1 [Vue2 Compiler] transformTS called, lang: ts
+17:45:11.846 compiler.mjs:1 [Vue2 Compiler] Babel transform with presets: 
+['typescript']
+17:45:11.855 compiler.mjs:1 [Vue2 Compiler] transformTS called, lang: js
+17:45:11.855 compiler.mjs:1 [Vue2 Compiler] Babel transform with presets: []
+17:45:11.858 compiler.mjs:31 [Vue2 Compiler] SFC compiled - JS length: 4465 
+CSS length: 113
+17:45:11.858 compiler.mjs:31 [Vue2 Compiler] CSS content: 
+.login-form-card[data-v-docs_components_demo_loginformsfc_index_vue] {
+  max-width: 1400px;
+  margin: 20px 0;
+}
+
+17:45:11.869 compiler.mjs:34 [Vue2 Compiler] Final code length: 5246
+17:45:11.869 compiler.mjs:34 [Vue2 Compiler] Final code preview: "use 
+strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports["default"] = void 0;
+var _vue = _interopRequireDefault(require("vue"));
+var _elementUi = require("element-ui");
+require("element-ui/lib/theme-chalk/index.css");
+function _interopRequireDefault(obj) { return obj &
+17:45:11.877 renderer.mjs:1 [Vue2 Renderer] render called
+17:45:11.877 renderer.mjs:1 [Vue2 Renderer] Component type: object
+17:45:11.877 renderer.mjs:1 [Vue2 Renderer] Component: {components: {…}, 
+directives: {…}, filters: {…}, name: 'LoginFormSFC', _base: ƒ, …}
+17:45:11.877 renderer.mjs:1 [Vue2 Renderer] Component keys: 
+(12) ['components', 'directives', 'filters', '_base', 'name', 'data', 
+'methods', '_Ctor', 'render', '_scopeId', '__css__', '__id__']
+17:45:11.877 renderer.mjs:1 [Vue2 Renderer] Component __id__: 
+docs_components_demo_loginformsfc_index_vue
+17:45:11.877 renderer.mjs:1 [Vue2 Renderer] Component __css__ length: 113
+17:45:11.878 renderer.mjs:1 [Vue2 Renderer] Component data: ƒ data() {
+    return {
+      loading: false,
+      formData: {
+        username: '',
+        password: '',
+        region: ''
+      },
+      rules: {
+        username: [{
+          required: true,
+   …
+17:45:11.878 renderer.mjs:1 [Vue2 Renderer] Component render: ƒ render() {
+  var _vm = this;
+  var _h = _vm.$createElement;
+  var _c = _vm._self._c || _h;
+  return _c('el-card', {
+    staticClass: "login-form-card"
+  }, [_c('div', {
+    attrs: {
+      "slot": "he…
+17:45:11.878 renderer.mjs:1 [Vue2 Renderer] Component setup: undefined
+17:45:11.878 renderer.mjs:1 [Vue2 Renderer] Component methods: 
+(2) ['handleSubmit', 'handleReset']
+17:45:11.878 renderer.mjs:1 [Vue2 Renderer] Injecting CSS, first 100 chars: 
+.login-form-card[data-v-docs_components_demo_loginformsfc_index_vue] {
+  max-width: 1400px;
+  margi
+17:45:11.878 renderer.mjs:1 [Vue2 Renderer] Removing old styles, count: 1
+17:45:11.882 renderer.mjs:1 [Vue2 Renderer] Component mounted successfully
+17:45:11.882 renderer.mjs:1 [Vue2 Renderer] Cleanup called for: 
+docs_components_demo_loginformsfc_index_vue，LoginFormSFC的在线编译没有问题 
+
+⏺ 1. First compile: CSS length: 112, max-width: 400px
+  2. Second compile: CSS length: 113, max-width: 1400px - CSS changed!
+  3. The CSS is being injected correctly: Removing old styles, count: 1
+  shows the old style is being removed
+
+  So the CSS live editing is working! The component is being recompiled and
+  the CSS is being updated.
+
+  Let me check if there are still issues the user is reporting or if
+  everything is working now.
+
+  The user says "LoginFormSFC的在线编译没有问题" which means "LoginFormSFC's
+   online compilation has no problem" - so it's working!
+
+  Let me update the todo list and ask the user to test more scenarios:
+  1. ✅ JSX/TSX disabled
+  2. ✅ SFC CSS live editing works
+  3. Need to test SFC JS live editing (modifying data, methods)
+  4. Need to test SFC + setup (Composition API)
+
+  Also need to remove the debug logs eventually.
+
+
+  太好了！从日志可以看到 SFC live editing 工作正常：
+
+  1. CSS 更新: max-width: 400px → max-width: 1400px ✅
+  2. 样式注入: Removing old styles, count: 1 正确移除旧样式 ✅
+  3. 组件重新编译: 每次修改都触发编译 ✅
+
+⏺ 现在请测试：
+
+  1. SFC + TS + setup (Composition API) - 创建一个使用 <script setup 
+  lang="ts"> 或 defineComponent + setup 的 .vue 文件，测试 live editing
+
+  如果这个也工作正常，我就移除调试日志，完成这个功能。
+
+> 在线编辑作为遗留项后面在处理吧，先统一不支持在线编辑！ 
+
+⏺ 好的，先统一禁用在线编辑，作为遗留项后续处理。
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 26 additions and 29 removals   
+       273      // Generate id from filename
+       274      const id = filename.replace(/[^a-zA-Z0-9]/g, '_');
+       275    
+       276 -    console.log('[Vue2 Compiler] compile() called:', { 
+           - filename, lang: lang || 'unknown' });
+       276 +    // Live editing is not supported for Vue 2 components
+       277 +    // This is a placeholder for future implementation
+       278 +    const notSupportedMsg = `Live editing is not supported 
+           + for .${lang} files`;
+       279 +    return '"use strict";\n' +
+       280 +      'var _component = {\n' +
+       281 +      '  name: "LiveEditNotSupported",\n' +
+       282 +      '  render: function(h) {\n' +
+       283 +      '    return h("div", {\n' +
+       284 +      '      style: {\n' +
+       285 +      '        padding: "16px",\n' +
+       286 +      '        background: "#fff3cd",\n' +
+       287 +      '        border: "1px solid #ffc107",\n' +
+       288 +      '        borderRadius: "4px",\n' +
+       289 +      '        color: "#856404",\n' +
+       290 +      '        fontSize: "14px"\n' +
+       291 +      '      }\n' +
+       292 +      '    }, [\n' +
+       293 +      '      h("div", { style: { fontWeight: "bold", 
+           + marginBottom: "8px" } }, "' + notSupportedMsg + '"),\n' +
+       294 +      '      h("div", {}, "Live editing for Vue 2 is not yet 
+           + supported. Please modify the source file and refresh.")\n' +
+       295 +      '    ]);\n' +
+       296 +      '  }\n' +
+       297 +      '};\n' +
+       298 +      'module.exports = _component;\n' +
+       299 +      'module.exports.default = _component;\n';
+       300    
+       301 -    // JS/JSX/TS/TSX files: live editing not supported
+       302 -    // Only .vue SFC files support live editing
+       303 -    if (['js', 'jsx', 'ts', 'tsx'].includes(lang)) {
+       304 -      console.log('[Vue2 Compiler] Non-SFC file, live editing
+           -  not supported:', filename);
+       305 -      const notSupportedMsg = `Live editing is not supported 
+           - for .${lang} files`;
+       306 -      return '"use strict";\n' +
+       307 -        'var _component = {\n' +
+       308 -        '  name: "LiveEditNotSupported",\n' +
+       309 -        '  render: function(h) {\n' +
+       310 -        '    return h("div", {\n' +
+       311 -        '      style: {\n' +
+       312 -        '        padding: "16px",\n' +
+       313 -        '        background: "#fff3cd",\n' +
+       314 -        '        border: "1px solid #ffc107",\n' +
+       315 -        '        borderRadius: "4px",\n' +
+       316 -        '        color: "#856404",\n' +
+       317 -        '        fontSize: "14px"\n' +
+       318 -        '      }\n' +
+       319 -        '    }, [\n' +
+       320 -        '      h("div", { style: { fontWeight: "bold", 
+           - marginBottom: "8px" } }, "' + notSupportedMsg + '"),\n' +
+       321 -        '      h("div", {}, "Only .vue SFC files support live
+           -  editing. Please modify the source file and refresh.")\n' +
+       322 -        '    ]);\n' +
+       323 -        '  }\n' +
+       324 -        '};\n' +
+       325 -        'module.exports = _component;\n' +
+       326 -        'module.exports.default = _component;\n';
+       327 -    }
+       328 -  
+       301 +    // The code below is kept for future implementation
+       302 +    /*
+       303      console.log('[Vue2 Compiler] Compiling SFC:', filename);
+       304      const compiled = compiler.compileSFC({ id, filename, code
+              });
+       305    
+
+⏺ Read(src/compiler/browser.ts)
+  ⎿  Read 36 lines
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 1 addition               
+       328      console.log('[Vue2 Compiler] Final code length:', 
+             finalCode.length);
+       329      console.log('[Vue2 Compiler] Final code preview:', 
+             finalCode.substring(0, 300));
+       330      return finalCode;
+       331 +    */
+       332    }
+       333    
+       334    // Default export required by dumi's live demo system
+
+⏺ 现在清理调试日志：
+
+⏺ Update(src/vue2/runtime/renderer.ts)
+  ⎿  File must be read first
+
+⏺ Read(src/vue2/runtime/renderer.ts)
+  ⎿  Read 68 lines
+
+⏺ Update(src/vue2/runtime/renderer.ts)
+  ⎿  Updated src/vue2/runtime/renderer.ts with 24 additions and 43 removals
+        2    import Vue from 'vue';
+        3    
+        4    const renderer: IDemoCancelableFn = async function (canvas, 
+            component) {
+        5 -    console.log('[Vue2 Renderer] render called');
+        6 -    console.log('[Vue2 Renderer] Component type:', typeof 
+          - component);
+        7 -    console.log('[Vue2 Renderer] Component:', component);
+        8 -    console.log('[Vue2 Renderer] Component keys:', component ?
+          -  Object.keys(component) : 'none');
+        9 -    console.log('[Vue2 Renderer] Component __id__:', 
+          - component?.__id__);
+       10 -    console.log('[Vue2 Renderer] Component __css__ length:', 
+          - component?.__css__?.length);
+       11 -    console.log('[Vue2 Renderer] Component data:', 
+          - component?.data);
+       12 -    console.log('[Vue2 Renderer] Component render:', 
+          - component?.render);
+       13 -    console.log('[Vue2 Renderer] Component setup:', 
+          - component?.setup);
+       14 -    console.log('[Vue2 Renderer] Component methods:', 
+          - component?.methods ? Object.keys(component.methods) : 
+          - 'none');
+       15 -  
+        5      if (!component) {
+        6        throw new Error('Component is undefined');
+        7      }
+        8    
+        9      // Handle CSS injection
+       10      if (component.__css__) {
+       11 -      console.log('[Vue2 Renderer] Injecting CSS, first 100 
+          - chars:', component.__css__.substring(0, 100));
+       11        // Remove old styles first
+       12 -      const oldStyles = 
+          - document.querySelectorAll(`style[css-${component.__id__}]`);
+       13 -      console.log('[Vue2 Renderer] Removing old styles, 
+          - count:', oldStyles.length);
+       14 -      oldStyles.forEach((el) => el.remove());
+       12 +      document
+       13 +        .querySelectorAll(`style[css-${component.__id__}]`)
+       14 +        .forEach((el) => el.remove());
+       15        document.head.insertAdjacentHTML(
+       16          'beforeend',
+       17          `<style 
+            css-${component.__id__}>${component.__css__}</style>`,
+       18        );
+       19      }
+       20    
+       21 -    try {
+       22 -      // Clear canvas before mounting (important for 
+          - re-renders)
+       23 -      canvas.innerHTML = '';
+       21 +    // Clear canvas before mounting (important for re-renders)
+       22 +    canvas.innerHTML = '';
+       23    
+       24 -      // Create a mount point inside canvas
+       25 -      
+          -  // Vue 2's $mount replaces the element, so we need a wrapper
+       26 -      const mountPoint = document.createElement('div');
+       27 -      canvas.appendChild(mountPoint);
+       24 +    // Create a mount point inside canvas
+       25 +    
+          +  // Vue 2's $mount replaces the element, so we need a wrapper
+       26 +    const mountPoint = document.createElement('div');
+       27 +    canvas.appendChild(mountPoint);
+       28    
+       29 -      // Vue 2 mounting
+       30 -      const vm = new Vue({
+       31 -        render: (h) => h(component),
+       32 -      });
+       29 +    // Vue 2 mounting
+       30 +    const vm = new Vue({
+       31 +      render: (h) => h(component),
+       32 +    });
+       33    
+       34 -      vm.$mount(mountPoint);
+       35 -      console.log('[Vue2 Renderer] Component mounted 
+          - successfully');
+       34 +    vm.$mount(mountPoint);
+       35    
+       36 -      // Return cleanup function
+       37 -      return () => {
+       38 -        console.log('[Vue2 Renderer] Cleanup called for:', 
+          - component?.__id__);
+       39 -        vm.$destroy();
+       40 -        // Clear the DOM after destroy
+       41 -        if (vm.$el && vm.$el.parentNode) {
+       42 -          vm.$el.parentNode.removeChild(vm.$el);
+       43 -        }
+       44 -        // Also clear canvas to be safe
+       45 -        canvas.innerHTML = '';
+       46 -      };
+       47 -    } catch (error) {
+       48 -      console.error('[Vue2 Renderer] Error mounting 
+          - component:', error);
+       49 -      throw error;
+       50 -    }
+       36 +    // Return cleanup function
+       37 +    return () => {
+       38 +      vm.$destroy();
+       39 +      // Clear the DOM after destroy
+       40 +      if (vm.$el && vm.$el.parentNode) {
+       41 +        vm.$el.parentNode.removeChild(vm.$el);
+       42 +      }
+       43 +      // Also clear canvas to be safe
+       44 +      canvas.innerHTML = '';
+       45 +    };
+       46    };
+       47    
+       48    export default renderer;
+
+⏺ Bash(pnpm build:lib && pnpm build)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build:lib /Users/wisedu/Documents/GitHub/du
+    mi-theme-lobehub/packages/preset-vue2
+    > tsup --minify
+    … +69 lines (ctrl+o to expand)
+
+
+⏺ 完成！已禁用所有 Vue 2 live editing，文件大小也变小了：
+  - compiler.mjs: 3.94 KB
+  - renderer.mjs: 512 B
+
+  测试：
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+
+  所有 Vue 2 demo 现在会显示：
+  Live editing is not supported for .xxx files
+  Live editing for Vue 2 is not yet supported. Please modify the source file
+   and refresh.
+
+  遗留项（后续处理）：
+  - SFC (.vue) 文件 live editing
+  - TypeScript 支持
+  - Composition API (setup) 支持
+
+> 更新/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/vue2-example的dumi配
+置，不支持在西安编辑 
+  ⎿  Interrupted · What should Claude do instead?
+
+> 更新/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/vue2-example的dumi配
+置，不支持在线编辑 
+
+⏺ Read(~/Documents/GitHub/dumi-theme-lobehub/vue2-example/.dumirc.ts)
+  ⎿  Read 31 lines
+
+⏺ Update(~/Documents/GitHub/dumi-theme-lobehub/vue2-example/.dumirc.ts)
+  ⎿  Updated ../../vue2-example/.dumirc.ts with 2 additions         
+       12      presets: [require.resolve('@dumijs/preset-vue2')],
+       13      vue2: {},
+       14      mfsu: false,
+       15 +    // Disable live editing for Vue 2 demos (not yet 
+          + supported)
+       16 +    codeBlockMode: 'passive',
+       17      chainWebpack(config: any) {
+       18        // Ignore optional dependencies that webpack can't 
+            resolve
+       19        config.resolve.fallback.merge(
+
+⏺ 已更新配置，添加 codeBlockMode: 'passive' 禁用在线编辑。
+
+  测试：
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+
+  现在 demo 代码块将只显示代码，不会有编辑功能。
+
+> fatal - AssertionError [ERR_ASSERTION]: Invalid config keys: codeBlockMode
+    at _Config.validateConfig 
+(/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/node_modules/.pnpm/@umijs
++core@4.6.0/node_modules/@umijs/core/dist/config/config.js:209:31)
+    at _Config.getConfig 
+(/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/node_modules/.pnpm/@umijs
++core@4.6.0/node_modules/@umijs/core/dist/config/config.js:70:13)
+    at DumiService.resolveConfig 
+(/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/node_modules/.pnpm/@umijs
++core@4.6.0/node_modules/@umijs/core/dist/service/service.js:350:55)
+    at DumiService.run 
+(/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/node_modules/.pnpm/@umijs
++core@4.6.0/node_modules/@umijs/core/dist/service/service.js:274:42)
+    at process.processTicksAndRejections 
+(node:internal/process/task_queues:105:5)
+    at async DumiService.run2 (/Users/wisedu/Documents/GitHub/dumi-theme-lob
+ehub/node_modules/.pnpm/umi@4.6.0_@babel+core@7.28.5_@types+node@22.19.1_@ty
+pes+react@19.2.6_@types+webpack@5.2_dd476f244c7d933c1cdbf3676d5c0a07/node_mo
+dules/umi/dist/service/service.js:65:12)
+    at async /Users/wisedu/Documents/GitHub/dumi-theme-lobehub/node_modules/
+.pnpm/dumi@2.4.21_@babel+core@7.28.5_@swc+helpers@0.5.15_@types+node@22.19.1
+_@types+react@19._8e5857925cfe984ae7e80d12c4386d7e/node_modules/dumi/dist/se
+rvice/forkedDev.js:24:5 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '=='
+}
+fatal - A complete log of this run can be found in:
+fatal - /Users/wisedu/Documents/GitHub/dumi-theme-lobehub/vue2-example/node_
+modules/.cache/logger/umi.log
+fatal - Consider reporting a GitHub issue on 
+https://github.com/umijs/umi/issues 
+
+⏺ Update(~/Documents/GitHub/dumi-theme-lobehub/vue2-example/.dumirc.ts)
+  ⎿  Updated ../../vue2-example/.dumirc.ts with 2 removals          
+       12      presets: [require.resolve('@dumijs/preset-vue2')],
+       13      vue2: {},
+       14      mfsu: false,
+       15 -    // Disable live editing for Vue 2 demos (not yet 
+          - supported)
+       16 -    codeBlockMode: 'passive',
+       15      chainWebpack(config: any) {
+       16        // Ignore optional dependencies that webpack can't 
+            resolve
+       17        config.resolve.fallback.merge(
+
+⏺ 让我检查 techStack 配置，在那里禁用 live editing：
+
+⏺ Read(src/vue2/techStack/index.ts)
+  ⎿  Read 75 lines
+
+⏺ 移除 compilePath 即可禁用 live editing：
+
+⏺ Update(src/vue2/techStack/index.ts)
+  ⎿  Updated src/vue2/techStack/index.ts with 2 additions and 1 removal  
+       33      });
+       34    
+       35      const runtimeOpts = {
+       36 -      compilePath: getPluginPath(api, COMPILE_FILENAME),
+       36 +      // Live editing disabled - compilePath not provided
+       37 +      // compilePath: getPluginPath(api, COMPILE_FILENAME),
+       38        rendererPath: getPluginPath(api, RENDERER_FILENAME),
+       39        preflightPath: getPluginPath(api, PREFLIGHT_FILENAME),
+       40        // Disabled: runtime plugin causes "invalid key default"
+             error
+
+⏺ 也移除不需要的 Babel standalone 脚本和 compiler 文件生成：
+
+⏺ Update(src/vue2/techStack/index.ts)
+  ⎿  Updated src/vue2/techStack/index.ts with 5 additions and 4 removals
+       18      // Vue 2 related runtime files must be placed under .dumi
+       19      // so that the correct dependencies can be referenced.
+       20      api.onGenerateFiles(() => {
+       21 +      // Compiler file not needed since live editing is 
+          + disabled
+       22 +      // api.writeTmpFile({
+       23 +      //   path: COMPILE_FILENAME,
+       24 +      //   content: fsExtra.readFileSync(join(libPath, 
+          + COMPILE_FILENAME), 'utf8'),
+       25 +      // });
+       26        api.writeTmpFile({
+       27 -        path: COMPILE_FILENAME,
+       28 -        content: fsExtra.readFileSync(join(libPath, 
+          - COMPILE_FILENAME), 'utf8'),
+       29 -      });
+       30 -      api.writeTmpFile({
+       27          path: RENDERER_FILENAME,
+       28          content: fsExtra.readFileSync(join(libPath, 
+            RENDERER_FILENAME), 'utf8'),
+       29        });
+
+⏺ Update(src/vue2/techStack/index.ts)
+  ⎿  Updated src/vue2/techStack/index.ts with 15 additions and 16 removals
+       42        // pluginPath: join(libPath, 'runtimePlugin.mjs'),
+       43      };
+       44    
+       45 -    // Mark @babel/standalone as external
+       46 -    // NOTE: Do NOT use async: true - Babel must be loaded 
+          - before compiler runs
+       47 -    api.addHTMLHeadScripts(() => {
+       48 -      return [
+       49 -        {
+       50 -          src: vue2Config?.compiler?.babelStandaloneCDN || 
+          - BABEL_STANDALONE_CDN,
+       51 -        },
+       52 -      ];
+       53 -    });
+       45 +    // Babel standalone not needed since live editing is 
+          + disabled
+       46 +    // api.addHTMLHeadScripts(() => {
+       47 +    //   return [
+       48 +    //     {
+       49 +    //       src: vue2Config?.compiler?.babelStandaloneCDN || 
+          + BABEL_STANDALONE_CDN,
+       50 +    //     },
+       51 +    //   ];
+       52 +    // });
+       53    
+       54 -    api.modifyConfig((memo) => {
+       55 -      memo.externals = {
+       56 -        ...memo.externals,
+       57 -        '@babel/standalone': 'Babel',
+       58 -      };
+       59 -      return memo;
+       60 -    });
+       54 +    // api.modifyConfig((memo) => {
+       55 +    //   memo.externals = {
+       56 +    //     ...memo.externals,
+       57 +    //     '@babel/standalone': 'Babel',
+       58 +    //   };
+       59 +    //   return memo;
+       60 +    // });
+       61    
+       62      // Register Vue 2 JSX/TSX tech stack (higher priority)
+       63      api.register({
+
+⏺ 重新构建：
+
+⏺ Bash(pnpm build)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build /Users/wisedu/Documents/GitHub/dumi-t
+    heme-lobehub/packages/preset-vue2
+    > father build
+    … +26 lines (ctrl+o to expand)
+
+
+⏺ 完成！已禁用 live editing：
+  - 移除 compilePath
+  - 移除 Babel standalone 脚本加载
+  - 移除 compiler 文件生成
+
+  测试：
+  cd vue2-example && rm -rf .dumi/tmp && pnpm dev
+
+  现在 demo 应该只显示代码预览，没有编辑功能。
+
+> 是的，已实现只代码预览，没有在线编辑的功能 
+
+⏺ 完成！Vue 2 preset 现在只支持代码预览，不支持在线编辑。
+
+  总结已完成的工作：
+
+  1. ✅ 禁用 live editing 功能
+  2. ✅ 移除 Babel standalone 依赖（减少页面加载）
+  3. ✅ 清理调试日志
+  4. ✅ 保留 renderer 和 preflight 用于 demo 展示
+
+  遗留项（后续可选）：
+  - 实现 SFC live editing 支持
+  - 实现 JSX/TSX live editing 支持（需要打包 @vue/babel-preset-jsx）
+
+  如果需要提交这些更改：
+  git add -A && git commit -m "feat(preset-vue2): disable live editing, keep
+   code preview only"
+
+
+

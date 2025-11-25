@@ -1,0 +1,62 @@
+{
+  "name": "@dumijs/preset-vue2",
+  "version": "0.0.1",
+  "description": "Vue 2 support plugins for dumi",
+  "keywords": [
+    "dumi",
+    "plugin",
+    "preset",
+    "vue2"
+  ],
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "lib",
+    "dist",
+    "compiled"
+  ],
+  "scripts": {
+    "build": "father build",
+    "build:deps": "father prebundle",
+    "build:lib": "tsup --minify",
+    "dev": "father dev",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@babel/helper-module-imports": "^7.24.0",
+    "@babel/plugin-syntax-jsx": "^7.24.0",
+    "@types/hash-sum": "^1.0.0",
+    "@umijs/bundler-webpack": "^4.0.81",
+    "@vue/babel-helper-vue-jsx-merge-props": "^1.4.0",
+    "@vue/component-compiler-utils": "^3.3.0",
+    "codesandbox-import-utils": "^2.2.3",
+    "compare-versions": "^6.1.0",
+    "hash-sum": "^2.0.0",
+    "html-tags": "^3.3.1",
+    "lodash.kebabcase": "^4.1.1",
+    "svg-tags": "^1.0.0",
+    "vue-loader": "^15.11.1"
+  },
+  "devDependencies": {
+    "@babel/preset-typescript": "^7.28.5",
+    "@types/babel__core": "^7.20.5",
+    "@types/babel__standalone": "^7.1.7",
+    "@vue/babel-preset-jsx": "^1.4.0",
+    "@vue/compiler-sfc": "^2.7.16",
+    "dumi": "^2.0.0",
+    "father": "^4.1.9",
+    "tsup": "^8.0.1",
+    "vue": "^2.7.16",
+    "vue-template-compiler": "^2.7.16"
+  },
+  "peerDependencies": {
+    "dumi": "^2.0.0",
+    "vue": "^2.6.0 || ^2.7.0",
+    "vue-template-compiler": "^2.6.0 || ^2.7.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "authors": []
+}
