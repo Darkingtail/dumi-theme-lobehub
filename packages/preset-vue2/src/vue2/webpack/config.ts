@@ -13,9 +13,14 @@ export function getConfig(config: Config, api: IApi) {
   // This is a direct dependency to ensure it's resolvable in pnpm
   const tsPresetPath = require.resolve('@babel/preset-typescript');
 
-  // Vue 2 JSX/TSX support - only for files in vue2 directories
-  // Use resourceQuery to match files with ?techStack=vue2-tsx
-  // Use our custom fixed JSX plugin instead of @vue/babel-preset-jsx
+  // Vue 2 JSX/TSX support for demo files with techStack query
+  // Only process files with ?techStack=vue2-tsx query to avoid breaking React JSX
+  // Use @vue/babel-preset-jsx with injectH: false for Composition API support
+  //
+  // IMPORTANT: Babel presets run in REVERSE order (last to first), so:
+  // 1. TypeScript preset runs FIRST (last in array) - strips type annotations
+  // 2. Vue JSX preset runs SECOND - transforms JSX to h() calls
+  // We exclude umi's presets because they may include React JSX transform
   config.module
     .rule('vue2-jsx-tsx')
     .test(/\.(jsx|tsx)$/)
@@ -23,13 +28,17 @@ export function getConfig(config: Config, api: IApi) {
     .use('babel-loader')
     .loader(babelInUmi.loader)
     .options({
-      ...babelInUmi.options,
-      plugins: [
-        ...(babelInUmi.options.plugins || []),
-        // Use our fixed Vue 2 JSX plugin
-        require.resolve('@dumijs/preset-vue2/compiled/vue2-jsx-plugin'),
+      
+      // Keep only essential plugins from umi
+plugins: babelInUmi.options.plugins || [],
+      
+      // Don't inherit umi's presets - they may include React JSX transform
+presets: [
+        // Vue JSX preset runs SECOND (after TS strips types)
+        [require.resolve('@vue/babel-preset-jsx'), { injectH: false }],
+        // TypeScript preset runs FIRST (last in reverse order)
+        [tsPresetPath, { allExtensions: true, isTSX: true, onlyRemoveTypeImports: true }],
       ],
-      presets: [...babelInUmi.options.presets, tsPresetPath],
     });
 
   config.module.noParse(/^(vue|vue-router|vuex|vuex-router-sync)$/);

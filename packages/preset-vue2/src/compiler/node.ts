@@ -11,7 +11,9 @@ export const compiler: ReturnType<typeof createCompiler> = createCompiler({
   availablePresets: {
     env,
     typescript,
-    'vue2-jsx': require.resolve('@vue/babel-preset-jsx'),
+    // Vue 2 JSX preset with injectH: false
+    // This is critical for Composition API setup() functions where this.$createElement doesn't exist
+    'vue2-jsx': [require.resolve('@vue/babel-preset-jsx'), { injectH: false }],
   },
   babel,
 });
@@ -21,7 +23,30 @@ export function compile(options: CompileOptions) {
   const [, lang] = filename.match(/[^.]+\.([^.]+)$/) || [];
 
   if (['js', 'jsx', 'ts', 'tsx'].includes(lang)) {
-    return compiler.transformTS(code, filename, { lang });
+    let result = compiler.transformTS(code, filename, { lang });
+
+    // For JSX/TSX files, inject h import at the top if not already present
+    // This is needed because with injectH: false, users must have h in scope
+    if ((lang === 'jsx' || lang === 'tsx') && result) {
+      // Check if h is in the import
+      const hasHInImport = /import\s*{[^}]*\bh\b[^}]*}\s*from\s*["']vue["']/.test(result);
+
+      if (!hasHInImport) {
+        // Find the first import from 'vue' and add h to it
+        const vueImportMatch = result.match(/import\s*{([^}]+)}\s*from\s*["']vue["']/);
+        if (vueImportMatch) {
+          result = result.replace(
+            /import\s*{([^}]+)}\s*from\s*["']vue["']/,
+            `import { h, $1 } from 'vue'`,
+          );
+        } else {
+          // No vue import found, add one at the top
+          result = `import { h } from 'vue';\n${result}`;
+        }
+      }
+    }
+
+    return result;
   }
 
   const compiled = compiler.compileSFC(options);

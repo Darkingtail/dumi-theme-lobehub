@@ -5,17 +5,38 @@ export default defineConfig([
     entry: {
       compiler: 'src/compiler/browser.ts',
     },
-    // External: packages that are available in browser runtime
-external: ['vue-template-compiler', '@vue/component-compiler-utils'],
-    
-format: 'esm',
-    
-name: 'compiler',
-    
-outDir: 'lib',
-    
-platform: 'browser',
-    
+    // Bundle Vue 3's @vue/compiler-sfc browser version for <script setup> support
+    // Also bundle Vue JSX plugins for TSX/JSX Live Editing support
+    // The esm-browser.js is automatically selected due to the "import" export condition
+    esbuildOptions(options) {
+      options.conditions = ['import', 'browser'];
+      options.mainFields = ['module', 'browser', 'main'];
+    },
+    format: 'esm',
+    name: 'compiler',
+    noExternal: [
+      /@vue\/compiler-sfc/,
+      /@vue\/compiler-dom/,
+      /@vue\/compiler-core/,
+      /@vue\/shared/,
+      /@babel\/parser/,
+      /estree-walker/,
+      /source-map-js/,
+      // Vue JSX plugins for browser bundling
+      /@vue\/babel-plugin-transform-vue-jsx/,
+      /@vue\/babel-sugar-functional-vue/,
+      /@vue\/babel-sugar-v-model/,
+      /@vue\/babel-sugar-v-on/,
+      /@vue\/babel-helper-vue-jsx-merge-props/,
+      /@babel\/plugin-syntax-jsx/,
+      /@babel\/helper-plugin-utils/,
+      /@babel\/helper-module-imports/,
+      /lodash\.kebabcase/,
+      /html-tags/,
+      /svg-tags/,
+    ],
+    outDir: 'lib',
+    platform: 'browser',
     target: 'esnext',
     treeshake: true,
   },

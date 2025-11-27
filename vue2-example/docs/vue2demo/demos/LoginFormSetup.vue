@@ -37,9 +37,7 @@
       </el-form-item>
 
       <el-form-item>
-        <el-button type="primary" :loading="loading" @click="handleSubmit">
-          Login
-        </el-button>
+        <el-button type="primary" :loading="loading" @click="handleSubmit"> Login </el-button>
         <el-button @click="handleReset">Reset</el-button>
       </el-form-item>
     </el-form>
@@ -47,18 +45,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
 import {
+  Button as ElButton,
   Card as ElCard,
   Form as ElForm,
   FormItem as ElFormItem,
   Input as ElInput,
-  Select as ElSelect,
   Option as ElOption,
-  Button as ElButton,
+  Select as ElSelect,
   Message,
 } from 'element-ui';
 import 'element-ui/lib/theme-chalk/index.css';
+import { reactive, ref } from 'vue';
 
 interface FormData {
   username: string;
@@ -84,9 +82,7 @@ const rules = {
     { required: true, message: 'Please enter password', trigger: 'blur' },
     { min: 6, message: 'Password should be at least 6 characters', trigger: 'blur' },
   ],
-  region: [
-    { required: true, message: 'Please select region', trigger: 'change' },
-  ],
+  region: [{ required: true, message: 'Please select region', trigger: 'change' }],
 };
 
 const handleSubmit = (): void => {

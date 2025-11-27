@@ -219,8 +219,8 @@ export default {
 </template>
 
 <script lang="ts">
-import Vue from 'vue';
 import { Button } from 'element-ui';
+import Vue from 'vue';
 
 export default Vue.extend({
   name: 'ButtonDemo',

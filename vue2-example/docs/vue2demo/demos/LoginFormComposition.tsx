@@ -1,6 +1,6 @@
 import { Button, Card, Form, FormItem, Input, Message, Option, Select } from 'element-ui';
 import 'element-ui/lib/theme-chalk/index.css';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, reactive, ref } from 'vue';
 
 interface FormData {
   password: string;
@@ -9,57 +9,10 @@ interface FormData {
 }
 
 export default defineComponent({
-  data() {
-    return {
-      formData: {
-        password: '',
-        region: '',
-        username: '',
-      } as FormData,
-      loading: false,
-      regionOptions: [
-        { label: 'Beijing', value: 'beijing' },
-        { label: 'Shanghai', value: 'shanghai' },
-        { label: 'Guangzhou', value: 'guangzhou' },
-      ],
-      rules: {
-        password: [
-          { message: 'Please enter password', required: true, trigger: 'blur' },
-          { message: 'Password should be at least 6 characters', min: 6, trigger: 'blur' },
-        ],
-        region: [{ message: 'Please select region', required: true, trigger: 'change' }],
-        username: [
-          { message: 'Please enter username', required: true, trigger: 'blur' },
-          { max: 20, message: 'Length should be 3 to 20 characters', min: 3, trigger: 'blur' },
-        ],
-      },
-    };
-  },
-  methods: {
-    handleReset() {
-      (this.$refs.loginForm as any).resetFields();
-    },
-    handleSubmit() {
-      (this.$refs.loginForm as any).validate((valid: boolean) => {
-        if (valid) {
-          this.loading = true;
-          setTimeout(() => {
-            this.loading = false;
-            Message.success(
-              `Login successful! Welcome, ${this.formData.username} from ${this.formData.region}`,
-            );
-          }, 1000);
-        } else {
-          Message.error('Please check the form fields');
-          return false;
-        }
-      });
-    },
-  },
-  name: 'LoginFormDefine',
+  name: 'LoginFormComposition',
   render() {
-    return h(Card, { class: 'login-form-card' }, [
-      h('div', { slot: 'header' }, [h('span', 'defineComponent Demo - Login Form')]),
+    return h(Card, { class: 'login-form-composition' }, [
+      h('div', { slot: 'header' }, [h('span', 'Composition API Demo - Login Form')]),
       h(
         Form,
         {
@@ -69,7 +22,7 @@ export default defineComponent({
             model: this.formData,
             rules: this.rules,
           },
-          ref: 'loginForm',
+          ref: 'loginFormRef',
         },
         [
           h(FormItem, { props: { label: 'Username', prop: 'username' } }, [
@@ -141,7 +94,66 @@ export default defineComponent({
           ]),
         ],
       ),
-      h('style', `.login-form-card { max-width: 400px; margin: 20px 0; }`),
+      h('style', `.login-form-composition { max-width: 400px; margin: 20px 0; }`),
     ]);
+  },
+  setup() {
+    const loginFormRef = ref<any>(null);
+    const loading = ref(false);
+
+    const formData = reactive<FormData>({
+      password: '',
+      region: '',
+      username: '',
+    });
+
+    const rules = {
+      password: [
+        { message: 'Please enter password', required: true, trigger: 'blur' },
+        { message: 'Password should be at least 6 characters', min: 6, trigger: 'blur' },
+      ],
+      region: [{ message: 'Please select region', required: true, trigger: 'change' }],
+      username: [
+        { message: 'Please enter username', required: true, trigger: 'blur' },
+        { max: 20, message: 'Length should be 3 to 20 characters', min: 3, trigger: 'blur' },
+      ],
+    };
+
+    const regionOptions = [
+      { label: 'Beijing', value: 'beijing' },
+      { label: 'Shanghai', value: 'shanghai' },
+      { label: 'Guangzhou', value: 'guangzhou' },
+    ];
+
+    const handleSubmit = () => {
+      loginFormRef.value?.validate((valid: boolean) => {
+        if (valid) {
+          loading.value = true;
+          setTimeout(() => {
+            loading.value = false;
+            Message.success(
+              `Login successful! Welcome, ${formData.username} from ${formData.region}`,
+            );
+          }, 1000);
+        } else {
+          Message.error('Please check the form fields');
+          return false;
+        }
+      });
+    };
+
+    const handleReset = () => {
+      loginFormRef.value?.resetFields();
+    };
+
+    return {
+      formData,
+      handleReset,
+      handleSubmit,
+      loading,
+      loginFormRef,
+      regionOptions,
+      rules,
+    };
   },
 });

@@ -7,16 +7,13 @@ import { compile } from '@/compiler/node';
 export const Vue2JSXTechStack = (runtimeOpts: IDumiTechStackRuntimeOpts) =>
   defineTechStack({
     isSupported(node, lang: string) {
-      // Only support jsx/tsx files that are explicitly in a vue2 directory
-      // to avoid conflicts with React TSX files in mixed projects
-      if (!['jsx', 'tsx'].includes(lang)) return false;
-      const filePath = String(node?.properties?.src || '');
-      return filePath.includes('/vue2/') || filePath.includes('/vue2-');
+      // Support all jsx/tsx files in Vue 2 projects
+      // Since this is a Vue 2 preset, we assume all JSX files are Vue JSX
+      return ['jsx', 'tsx'].includes(lang);
     },
     name: 'vue2-tsx',
     onBlockLoad(args) {
-      // Only process files in vue2 directories
-      if (!args.path.includes('/vue2/') && !args.path.includes('/vue2-')) return null;
+      // Process all jsx/tsx files
       if (!args.path.endsWith('.tsx') && !args.path.endsWith('.jsx')) return null;
       const { filename } = args;
       return {

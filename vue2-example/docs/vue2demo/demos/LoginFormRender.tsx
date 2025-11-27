@@ -66,7 +66,7 @@ export default Vue.extend({
   },
   name: 'LoginFormRender',
   render(h) {
-    return h(Card, { class: 'login-form-card' }, [
+    return h(Card, { class: 'login-form-render' }, [
       h('div', { slot: 'header' }, [h('span', 'Render Function Demo - Login Form')]),
       h(
         Form,
@@ -149,7 +149,7 @@ export default Vue.extend({
           ]),
         ],
       ),
-      h('style', `.login-form-card { max-width: 400px; margin: 20px 0; }`),
+      h('style', `.login-form-render { max-width: 400px; margin: 20px 0; }`),
     ]);
   },
 });

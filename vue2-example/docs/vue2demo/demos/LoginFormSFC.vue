@@ -37,13 +37,7 @@
       </el-form-item>
 
       <el-form-item>
-        <el-button type="primary" :loading="loading" @click="handleSubmit">
-          Login
-        </el-button>
-        <el-button @click="handleReset">Reset</el-button>
-        <el-button @click="handleReset">Reset</el-button>
-        <el-button @click="handleReset">Reset</el-button>
-        <el-button @click="handleReset">Reset</el-button>
+        <el-button type="primary" :loading="loading" @click="handleSubmit"> Login </el-button>
         <el-button @click="handleReset">Reset</el-button>
       </el-form-item>
     </el-form>
@@ -51,18 +45,9 @@
 </template>
 
 <script lang="ts">
-import Vue from 'vue';
-import {
-  Card,
-  Form,
-  FormItem,
-  Input,
-  Select,
-  Option,
-  Button,
-  Message,
-} from 'element-ui';
+import { Button, Card, Form, FormItem, Input, Message, Option, Select } from 'element-ui';
 import 'element-ui/lib/theme-chalk/index.css';
+import Vue from 'vue';
 
 Vue.use(Card);
 Vue.use(Form);
@@ -92,7 +77,7 @@ interface Rules {
   region: RuleItem[];
 }
 
-export default Vue.extend({
+export default {
   name: 'LoginFormSFC',
   data(): { loading: boolean; formData: FormData; rules: Rules } {
     return {
@@ -111,9 +96,7 @@ export default Vue.extend({
           { required: true, message: 'Please enter password', trigger: 'blur' },
           { min: 6, message: 'Password should be at least 6 characters', trigger: 'blur' },
         ],
-        region: [
-          { required: true, message: 'Please select region', trigger: 'change' },
-        ],
+        region: [{ required: true, message: 'Please select region', trigger: 'change' }],
       },
     };
   },
@@ -125,7 +108,9 @@ export default Vue.extend({
           this.loading = true;
           setTimeout(() => {
             this.loading = false;
-            Message.success(`Login successful! Welcome, ${this.formData.username} from ${this.formData.region}`);
+            Message.success(
+              `Login successful! Welcome, ${this.formData.username} from ${this.formData.region}`,
+            );
           }, 1000);
         } else {
           Message.error('Please check the form fields');
@@ -138,7 +123,7 @@ export default Vue.extend({
       form.resetFields();
     },
   },
-});
+};
 </script>
 
 <style scoped>

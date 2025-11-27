@@ -71,7 +71,7 @@ export default defineComponent({
     };
 
     return () => (
-      <Card class="login-form-card">
+      <Card class="login-form-jsx">
         <div slot="header">
           <span>JSX Demo - Login Form</span>
         </div>
@@ -133,7 +133,7 @@ export default defineComponent({
 
         <style>
           {`
-            .login-form-card {
+            .login-form-jsx {
               max-width: 400px;
               margin: 20px 0;
             }

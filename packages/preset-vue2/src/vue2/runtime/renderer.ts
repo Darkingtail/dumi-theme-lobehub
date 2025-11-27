@@ -6,9 +6,8 @@ const renderer: IDemoCancelableFn = async function (canvas, component) {
     throw new Error('Component is undefined');
   }
 
-  // Handle CSS injection
+  // Handle CSS injection (from SFC styles)
   if (component.__css__) {
-    // Remove old styles first
     document.querySelectorAll(`style[css-${component.__id__}]`).forEach((el) => el.remove());
     document.head.insertAdjacentHTML(
       'beforeend',
@@ -16,11 +15,10 @@ const renderer: IDemoCancelableFn = async function (canvas, component) {
     );
   }
 
-  // Clear canvas before mounting (important for re-renders)
+  // Clear canvas before mounting
   canvas.innerHTML = '';
 
   // Create a mount point inside canvas
-  // Vue 2's $mount replaces the element, so we need a wrapper
   const mountPoint = document.createElement('div');
   canvas.append(mountPoint);
 
@@ -34,11 +32,9 @@ const renderer: IDemoCancelableFn = async function (canvas, component) {
   // Return cleanup function
   return () => {
     vm.$destroy();
-    // Clear the DOM after destroy
     if (vm.$el && vm.$el.parentNode) {
       vm.$el.remove();
     }
-    // Also clear canvas to be safe
     canvas.innerHTML = '';
   };
 };

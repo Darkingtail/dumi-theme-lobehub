@@ -29,6 +29,7 @@ export function resolveFilename(filename: string) {
 type Plugins = Record<string, BabelCore.PluginItem>;
 
 type CreateCompilerContext = {
+  availablePlugins?: Plugins;
   availablePresets?: Plugins;
   babel: ReturnType<typeof babelCore>;
 };
@@ -55,7 +56,13 @@ function doCompileStyle(id: string, styles: SFCDescriptor['styles'], filename = 
   return styleList.join('\n');
 }
 
-export function createCompiler({ babel, availablePresets = {} }: CreateCompilerContext) {
+export function createCompiler({
+  babel,
+  availablePlugins = {},
+  availablePresets = {},
+}: CreateCompilerContext) {
+  // availablePlugins reserved for future use
+  void availablePlugins;
   function toCommonJS(es: string) {
     return babel.transformSync(es, {
       presets: [[availablePresets['env'] ?? 'env', { modules: 'cjs' }]],
@@ -77,15 +84,21 @@ export function createCompiler({ babel, availablePresets = {} }: CreateCompilerC
       const tsPreset = availablePresets['typescript'];
       if (tsPreset) {
         // allExtensions: true is needed for Vue SFC files (not .ts extension)
-        presets.push([tsPreset, { allExtensions: true, isTSX }]);
+        // onlyRemoveTypeImports: true ensures value imports like 'h' aren't removed
+        presets.push([tsPreset, { allExtensions: true, isTSX, onlyRemoveTypeImports: true }]);
       } else {
         // Fallback to require if preset not provided
-        presets.push([require('@babel/preset-typescript'), { allExtensions: true, isTSX }]);
+        presets.push([
+          require('@babel/preset-typescript'),
+          { allExtensions: true, isTSX, onlyRemoveTypeImports: true },
+        ]);
       }
     }
     if (lang === 'tsx' || lang === 'jsx') {
-      // Use Vue 2 JSX preset
-      presets.push(availablePresets['vue2-jsx'] ?? ['@vue/babel-preset-jsx', {}]);
+      // Use Vue 2 JSX preset with injectH disabled
+      // Users must explicitly import { h } from 'vue' for setup() functions
+      // For render(h) methods, h is passed as the first argument
+      presets.push(availablePresets['vue2-jsx'] ?? ['@vue/babel-preset-jsx', { injectH: false }]);
     }
 
     const { basename } = resolveFilename(filename);
@@ -164,16 +177,22 @@ export function createCompiler({ babel, availablePresets = {} }: CreateCompilerC
   function compileSFC(options: CompileOptions): CompileResult {
     const { id, code, filename } = options;
 
-    // Use parse from @vue/compiler-sfc
-    const descriptor = parse({
+    // Vue 3's parse returns { descriptor, errors }
+    const parseResult = parse(code, {
       filename,
-      source: code,
       sourceMap: false,
     });
 
-    if (descriptor.errors && descriptor.errors.length) {
-      return (descriptor.errors as any[]).map((e: any) =>
-        typeof e === 'string' ? new Error(e) : e instanceof Error ? e : new Error(String(e)),
+    const descriptor = parseResult.descriptor;
+    const parseErrors = parseResult.errors;
+
+    if (parseErrors && parseErrors.length) {
+      return parseErrors.map((e: any) =>
+        typeof e === 'string'
+          ? new Error(e)
+          : e instanceof Error
+            ? e
+            : new Error(String(e.message || e)),
       );
     }
 
@@ -199,13 +218,7 @@ export function createCompiler({ babel, availablePresets = {} }: CreateCompilerC
     const scriptLang = descriptor.script?.lang || descriptor.scriptSetup?.lang;
     const hasScoped = descriptor.styles.some((style) => style.scoped);
 
-    const scriptResult = doCompileScript(
-      id,
-      descriptor as any,
-      hasScoped,
-      scriptLang || '',
-      filename,
-    );
+    const scriptResult = doCompileScript(id, descriptor, hasScoped, scriptLang || '', filename);
 
     if (Array.isArray(scriptResult)) {
       return scriptResult as Error[];
@@ -214,7 +227,8 @@ export function createCompiler({ babel, availablePresets = {} }: CreateCompilerC
     js += `\n${scriptResult}`;
 
     if (hasScoped) {
-      js += `\n${COMP_IDENTIFIER}.__scopeId = "data-v-${id}";`;
+      // Vue 2 uses _scopeId (single underscore)
+      js += `\n${COMP_IDENTIFIER}._scopeId = "data-v-${id}";`;
     }
 
     let css = '';
