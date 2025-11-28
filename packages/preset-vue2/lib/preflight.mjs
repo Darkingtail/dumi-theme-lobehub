@@ -1,1 +1,0 @@
-import i from'vue';var r=function(t){if(!t)return "Component is undefined";if(typeof t!="object"&&typeof t!="function")return "Invalid Vue 2 component";let e=i.version;return e.startsWith("2.")?true:`Expected Vue 2.x but got ${e}`},o=r;export{o as default};
