@@ -7,6 +7,7 @@ import {
   type JsxIncludesConfig,
   LESS_CDN,
   SASS_CDN,
+  getCurrentPkgName,
   getPkgPath,
   getPluginPath,
 } from '@/shared';
@@ -26,7 +27,7 @@ export default function registerTechStack(api: IApi) {
       }
     | undefined;
 
-  const pkgPath = getPkgPath('@dumijs/preset-vue2', api.cwd);
+  const pkgPath = getPkgPath(getCurrentPkgName(), api.cwd);
   const libPath = join(pkgPath, '/lib');
 
   // Vue 2 related runtime files must be placed under .dumi

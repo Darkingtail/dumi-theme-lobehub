@@ -5,11 +5,17 @@ nav:
   order: 1
 ---
 
-## SFC Demo
+## SFC Options Api Demo
 
 Vue 2 Single File Component with Options API:
 
 <code src="./vue2demo/demos/LoginFormSFC.vue"></code>
+
+## SFC Vue.extend Options Api Demo
+
+Vue 2 Single File Component with Options API:
+
+<code src="./vue2demo/demos/LoginFormSFCExtend.vue"></code>
 
 ## SFC + script setup Demo
 
@@ -40,3 +46,9 @@ Vue 2.7 Composition API demo (using defineComponent + setup + ref):
 Vue 2.7 Composition API with setup() returning JSX render function:
 
 <code src="./vue2demo/demos/LoginFormJSX.tsx"></code>
+
+## TSX Vue.extend Demo
+
+Vue 2.7 Vue.extend
+
+<code src="./vue2demo/demos/LoginFormExtend.tsx"></code>

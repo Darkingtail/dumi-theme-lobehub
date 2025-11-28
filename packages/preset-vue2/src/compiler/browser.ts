@@ -30,10 +30,10 @@ import { createVue2JsxPreset } from './vue-jsx-browser';
 // sass.js uses callback-based API even in sync version
 interface SassResult {
   // Error message (on failure)
-  formatted?: string; 
+  formatted?: string;
   // Compiled CSS (on success)
-  message?: string; 
-  status: number; 
+  message?: string;
+  status: number;
   // 0 = success, non-zero = error
   text?: string; // Formatted error message
 }
@@ -392,7 +392,16 @@ export async function compile(code: string, opts: { filename: string }) {
         js += `\nexport default ${COMP_IDENTIFIER};`;
 
         const cjsResult = comp.toCommonJS(js);
-        return cjsResult?.code || js;
+        let cjsCode = cjsResult?.code || js;
+
+        // Fix Vue.extend() issue in dumi's Live Editing environment for SFC files
+        // Vue.extend() returns a constructor function, but when passed to React's useState,
+        // React will call it as an updater function (without 'new'), causing errors.
+        // Solution: Replace Vue.extend(options) with just options - Vue 2 accepts both.
+        cjsCode = cjsCode.replace(/_vue\["default"]\.extend\({/g, '({');
+        cjsCode = cjsCode.replace(/_vue\.default\.extend\({/g, '({');
+
+        return cjsCode;
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.error('[Vue2 Compiler] SFC compile error:', errorMsg);
