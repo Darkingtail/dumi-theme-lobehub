@@ -84,8 +84,8 @@ export default defineComponent({
           <FormItem label="Username" prop="username">
             <Input
               on={{ input: handleUsernameInput }}
+              placeholder="Please enter username"
               props={{
-                placeholder: 'Please enter username',
                 prefixIcon: 'el-icon-user',
                 value: formData.username,
               }}
@@ -95,8 +95,8 @@ export default defineComponent({
           <FormItem label="Password" prop="password">
             <Input
               on={{ input: handlePasswordInput }}
+              placeholder="Please enter password"
               props={{
-                placeholder: 'Please enter password',
                 prefixIcon: 'el-icon-lock',
                 showPassword: true,
                 type: 'password',
@@ -127,14 +127,14 @@ export default defineComponent({
             >
               Login
             </Button>
-            <Button on={{ click: handleReset }}>Reset</Button>
+            <Button on-click={handleReset}>Reset</Button>
           </FormItem>
         </Form>
 
         <style>
           {`
             .login-form-jsx {
-              max-width: 400px;
+              max-width: 550px;
               margin: 20px 0;
             }
           `}

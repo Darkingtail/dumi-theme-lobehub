@@ -3,6 +3,8 @@ import type { IApi } from 'dumi';
 import path from 'node:path';
 import VueLoaderPlugin from 'vue-loader/lib/plugin';
 
+import babelPluginVueH from './babel-plugin-vue-h';
+
 // Webpack configuration for Vue 2
 
 export function getConfig(config: Config, api: IApi) {
@@ -28,12 +30,11 @@ export function getConfig(config: Config, api: IApi) {
     .use('babel-loader')
     .loader(babelInUmi.loader)
     .options({
-      
-      // Keep only essential plugins from umi
-plugins: babelInUmi.options.plugins || [],
-      
+      // Keep essential plugins from umi, plus our h injection plugin
+      plugins: [...(babelInUmi.options.plugins || []), babelPluginVueH],
+
       // Don't inherit umi's presets - they may include React JSX transform
-presets: [
+      presets: [
         // Vue JSX preset runs SECOND (after TS strips types)
         [require.resolve('@vue/babel-preset-jsx'), { injectH: false }],
         // TypeScript preset runs FIRST (last in reverse order)

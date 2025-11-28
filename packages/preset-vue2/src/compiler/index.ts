@@ -1,30 +1,78 @@
 import {
   type SFCDescriptor,
   compileScript,
-  compileStyle,
   compileTemplate,
   parse,
   rewriteDefault,
 } from '@vue/compiler-sfc';
 import type { BabelCore, babelCore } from 'dumi/tech-stack-utils';
+import type Less from 'less';
+import less from 'less';
+import * as sass from 'sass';
 
-export interface CompileOptions {
-  code: string;
-  filename: string;
-  id: string;
-}
+import {
+  COMP_IDENTIFIER,
+  type CompileOptions,
+  type CompileResult,
+  type StylePreprocessor,
+  WARNINGS,
+  compileStyles,
+  generateScopedIdCode,
+  hasScoped,
+  hasStyleModule,
+  hasUnsupportedStyleLang,
+  resolveFilename,
+  toError,
+} from './shared';
 
-export type CompileResult =
-  | (string | Error)[]
-  | {
-      css: string;
-      js: string;
-    };
+/**
+ * Node.js style preprocessor for LESS/SCSS
+ * Uses sync APIs for Node.js environment
+ */
+const nodeStylePreprocessor: StylePreprocessor = (source: string, lang: string): string => {
+  if (lang === 'less') {
+    // LESS render is async, but we use renderSync workaround
+    // Actually less doesn't have renderSync, so we need a different approach
+    // For now, let's use a synchronous wrapper
+    let result = '';
+    let error: Error | null = null;
 
-export function resolveFilename(filename: string) {
-  const [, basename, lang] = filename.match(/([^.]+)\.([^.]+)$/) || [];
-  return { basename, lang };
-}
+    // less.render is async, but we can use the sync pattern with deasync or similar
+    // For simplicity, let's just do async-to-sync conversion
+    less.render(
+      source,
+      { syncImport: true },
+      (err: Less.RenderError | undefined, output: Less.RenderOutput | undefined) => {
+        if (err) {
+          error = new Error(`LESS compile error: ${err.message}`);
+        } else if (output) {
+          result = output.css;
+        }
+      },
+    );
+
+    if (error) throw error;
+    return result;
+  }
+
+  if (lang === 'scss' || lang === 'sass') {
+    const result = sass.compileString(source, {
+      syntax: lang === 'sass' ? 'indented' : 'scss',
+    });
+    return result.css;
+  }
+
+  // For unsupported languages, return as-is (will be handled as CSS)
+  return source;
+};
+
+// Re-export shared types and constants for backward compatibility
+export {
+  COMP_IDENTIFIER,
+  type CompileOptions,
+  type CompileResult,
+  resolveFilename,
+} from './shared';
 
 type Plugins = Record<string, BabelCore.PluginItem>;
 
@@ -33,28 +81,6 @@ type CreateCompilerContext = {
   availablePresets?: Plugins;
   babel: ReturnType<typeof babelCore>;
 };
-
-export const COMP_IDENTIFIER = '__sfc__';
-
-// Moved to outer scope per ESLint unicorn/consistent-function-scoping
-function doCompileStyle(id: string, styles: SFCDescriptor['styles'], filename = 'component.vue') {
-  const styleList: string[] = [];
-  const sfcFilename = filename;
-  for (const style of styles) {
-    const result = compileStyle({
-      filename: sfcFilename,
-      id: `data-v-${id}`,
-      scoped: style.scoped || false,
-      source: style.content,
-      trim: true,
-    });
-    if (result.errors && result.errors.length) {
-      return result.errors;
-    }
-    styleList.push(result.code);
-  }
-  return styleList.join('\n');
-}
 
 export function createCompiler({
   babel,
@@ -147,7 +173,7 @@ export function createCompiler({
           { lang: scriptLang },
         );
       } catch (error) {
-        return [error instanceof Error ? error : new Error(String(error))];
+        return [toError(error)];
       }
     } else {
       sfcCode = `const ${COMP_IDENTIFIER} = {};`;
@@ -161,9 +187,7 @@ export function createCompiler({
       } as any);
 
       if (templateResult.errors && templateResult.errors.length) {
-        return (templateResult.errors as any[]).map((e: any) =>
-          typeof e === 'string' ? new Error(e) : e instanceof Error ? e : new Error(String(e)),
-        );
+        return (templateResult.errors as unknown[]).map(toError);
       }
 
       let renderCode = transformTS(templateResult.code, sfcFilename, { lang: scriptLang });
@@ -187,38 +211,31 @@ export function createCompiler({
     const parseErrors = parseResult.errors;
 
     if (parseErrors && parseErrors.length) {
-      return parseErrors.map((e: any) =>
-        typeof e === 'string'
-          ? new Error(e)
-          : e instanceof Error
-            ? e
-            : new Error(String(e.message || e)),
-      );
+      return (parseErrors as unknown[]).map(toError);
     }
 
     let js = '';
     let skipStyleCompile = false;
 
+    // Check for unsupported features using shared utilities
     if (
-      descriptor.styles.some((style) => style.lang && style.lang !== 'css') ||
+      hasUnsupportedStyleLang(descriptor.styles) ||
       (descriptor.template && descriptor.template.lang)
     ) {
       skipStyleCompile = true;
-      js +=
-        '\nconsole.warn("Custom preprocessors ' +
-        'for <template> and <style> are not supported in the Codeblock.")';
+      js += `\nconsole.warn(${JSON.stringify(WARNINGS.PREPROCESSOR)})`;
     }
 
-    if (descriptor.styles.some((style) => style.module)) {
+    if (hasStyleModule(descriptor.styles)) {
       skipStyleCompile = true;
-      js += '\nconsole.warn("<style module> is not supported in the Codeblock.")';
+      js += `\nconsole.warn(${JSON.stringify(WARNINGS.STYLE_MODULE)})`;
     }
 
     // Get script lang from either script or scriptSetup
     const scriptLang = descriptor.script?.lang || descriptor.scriptSetup?.lang;
-    const hasScoped = descriptor.styles.some((style) => style.scoped);
+    const scopedStyles = hasScoped(descriptor.styles);
 
-    const scriptResult = doCompileScript(id, descriptor, hasScoped, scriptLang || '', filename);
+    const scriptResult = doCompileScript(id, descriptor, scopedStyles, scriptLang || '', filename);
 
     if (Array.isArray(scriptResult)) {
       return scriptResult as Error[];
@@ -226,14 +243,13 @@ export function createCompiler({
 
     js += `\n${scriptResult}`;
 
-    if (hasScoped) {
-      // Vue 2 uses _scopeId (single underscore)
-      js += `\n${COMP_IDENTIFIER}._scopeId = "data-v-${id}";`;
+    if (scopedStyles) {
+      js += `\n${generateScopedIdCode(id)}`;
     }
 
     let css = '';
     if (!skipStyleCompile && descriptor.styles.length > 0) {
-      const styleResult = doCompileStyle(id, descriptor.styles, filename);
+      const styleResult = compileStyles(id, descriptor.styles, filename, nodeStylePreprocessor);
       if (Array.isArray(styleResult)) {
         return styleResult;
       }

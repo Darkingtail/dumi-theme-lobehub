@@ -126,9 +126,13 @@ export default {
 };
 </script>
 
-<style scoped>
+<style scoped lang="less">
 .login-form-card {
-  max-width: 400px;
+  max-width: 500px;
   margin: 20px 0;
+  .el-form-item {
+    border: 1px solid #6d6d6d;
+    margin-bottom: 30px;
+  }
 }
 </style>

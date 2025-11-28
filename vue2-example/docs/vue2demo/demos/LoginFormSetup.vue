@@ -105,9 +105,13 @@ const handleReset = (): void => {
 };
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .login-form-card {
-  max-width: 400px;
+  max-width: 600px;
   margin: 20px 0;
+  .el-form-item {
+    border: 1px solid #951c1c;
+    margin-bottom: 16px;
+  }
 }
 </style>

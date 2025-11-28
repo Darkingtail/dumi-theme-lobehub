@@ -2,7 +2,14 @@ import type { IApi } from 'dumi';
 import { fsExtra } from 'dumi/plugin-utils';
 import { join } from 'node:path';
 
-import { BABEL_STANDALONE_CDN, getPkgPath, getPluginPath } from '@/shared';
+import {
+  BABEL_STANDALONE_CDN,
+  type JsxIncludesConfig,
+  LESS_CDN,
+  SASS_CDN,
+  getPkgPath,
+  getPluginPath,
+} from '@/shared';
 
 import { Vue2JSXTechStack } from './jsx';
 import { Vue2SfcTechStack } from './sfc';
@@ -13,7 +20,10 @@ const PREFLIGHT_FILENAME = 'preflight.mjs';
 
 export default function registerTechStack(api: IApi) {
   const vue2Config = api.userConfig?.vue2 as
-    | { compiler?: { babelStandaloneCDN?: string } }
+    | {
+        compiler?: { babelStandaloneCDN?: string; lessCDN?: string; sassCDN?: string };
+        jsxIncludes?: JsxIncludesConfig;
+      }
     | undefined;
 
   const pkgPath = getPkgPath('@dumijs/preset-vue2', api.cwd);
@@ -22,19 +32,22 @@ export default function registerTechStack(api: IApi) {
   // Vue 2 related runtime files must be placed under .dumi
   // so that the correct dependencies can be referenced.
   api.onGenerateFiles(() => {
-    // Compiler file for Live Editing
-    api.writeTmpFile({
-      content: fsExtra.readFileSync(join(libPath, COMPILE_FILENAME), 'utf8'),
-      path: COMPILE_FILENAME,
-    });
-    api.writeTmpFile({
-      content: fsExtra.readFileSync(join(libPath, RENDERER_FILENAME), 'utf8'),
-      path: RENDERER_FILENAME,
-    });
-    api.writeTmpFile({
-      content: fsExtra.readFileSync(join(libPath, PREFLIGHT_FILENAME), 'utf8'),
-      path: PREFLIGHT_FILENAME,
-    });
+    const filesToCopy = [
+      { desc: 'Compiler', src: COMPILE_FILENAME },
+      { desc: 'Renderer', src: RENDERER_FILENAME },
+      { desc: 'Preflight', src: PREFLIGHT_FILENAME },
+    ];
+
+    for (const file of filesToCopy) {
+      const srcPath = join(libPath, file.src);
+      try {
+        const content = fsExtra.readFileSync(srcPath, 'utf8');
+        api.writeTmpFile({ content, path: file.src });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        throw new Error(`[preset-vue2] Failed to read ${file.desc} file (${srcPath}): ${msg}`);
+      }
+    }
   });
 
   const runtimeOpts = {
@@ -43,11 +56,20 @@ export default function registerTechStack(api: IApi) {
     rendererPath: getPluginPath(api, RENDERER_FILENAME),
   };
 
-  // Load Babel standalone for browser-side compilation
+  // Load Babel standalone and style preprocessors for browser-side compilation
   api.addHTMLHeadScripts(() => {
     return [
+      // Babel for JSX/TSX transformation
       {
         src: vue2Config?.compiler?.babelStandaloneCDN || BABEL_STANDALONE_CDN,
+      },
+      // LESS compiler for browser-side LESS compilation
+      {
+        src: vue2Config?.compiler?.lessCDN || LESS_CDN,
+      },
+      // Sass.js for browser-side SCSS/SASS compilation
+      {
+        src: vue2Config?.compiler?.sassCDN || SASS_CDN,
       },
     ];
   });
@@ -63,7 +85,7 @@ export default function registerTechStack(api: IApi) {
 
   // Register Vue 2 JSX/TSX tech stack (higher priority)
   api.register({
-    fn: () => Vue2JSXTechStack(runtimeOpts),
+    fn: () => Vue2JSXTechStack({ jsxIncludes: vue2Config?.jsxIncludes, runtimeOpts }),
     key: 'registerTechStack',
     stage: 0,
   });

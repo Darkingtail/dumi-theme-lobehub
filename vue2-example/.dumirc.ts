@@ -53,7 +53,16 @@ export default {
   presets: [require.resolve('@dumijs/preset-vue2')],
   themeConfig: {
     name: 'Vue 2 Demo',
-    nav: [{ link: '/components', title: 'Components' }],
+    nav: [
+      { link: '/components', title: 'Components' },
+      { link: '/react-demos', title: 'React Demos' },
+    ],
   },
-  vue2: {},
+  // Vue 2 preset configuration
+  vue2: {
+    // jsxIncludes: Only process TSX/JSX files in paths containing 'vue2demo'
+    // Files in /react-demos/ will NOT be processed by Vue 2 preset
+    // and will use dumi's default React tech stack instead
+    jsxIncludes: ['vue2demo'],
+  },
 };

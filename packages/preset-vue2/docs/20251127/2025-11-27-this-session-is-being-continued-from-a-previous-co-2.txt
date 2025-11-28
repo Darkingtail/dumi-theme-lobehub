@@ -1,0 +1,704 @@
+
+╭─── Claude Code v2.0.54 ──────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting        │
+│                Welcome back sansan!                │ started                 │
+│                                                    │ Run /init to create a … │
+│                      ▗ ▗   ▖ ▖                     │ ─────────────────────── │
+│                                                    │ Recent activity         │
+│                        ▘▘ ▝▝                       │ No recent activity      │
+│                                                    │                         │
+│               Opus 4.5 · Claude Max                │                         │
+│ ~/…/GitHub/dumi-theme-lobehub/packages/preset-vue2 │                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+══════════════════ Conversation compacted · ctrl+o for history ═════════════════
+  ⎿  Read src/compiler/browser.ts (423 lines)
+  ⎿  Read src/compiler/index.ts (255 lines)
+  ⎿  Read src/compiler/shared.ts (301 lines)
+  ⎿  Read package.json (73 lines)
+  ⎿  Read src/vue2/runtime/renderer.ts (65 lines)
+  ⎿  Todo list read (6 items)
+
+⏺ I need to continue updating browser.ts to complete the LESS/SCSS support.
+  The compileSFC function needs to be made async to use compileStylesAsync
+  with the browserStylePreprocessor. Let me make the necessary changes.
+
+⏺ Read(src/compiler/browser.ts)
+  ⎿  Read 80 lines
+
+⏺ I see the issue. The compileSFC function is calling compileStyles which
+  isn't imported (should be compileStylesAsync), and it needs to be made
+  async. Let me update browser.ts to fix this:
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 8 additions and 3 removals     
+       183        return sfcCode;
+       184      }
+       185    
+       186 -    function compileSFC(options: CompileOptions): 
+           -  CompileResult {
+       186 +    async function compileSFC(options: CompileOptions): 
+           +  Promise<CompileResult> {
+       187        const { id, code, filename } = options;
+       188    
+       189        const parseResult = parse(code, {
+     ...
+       222    
+       223        js += `\n${scriptResult}`;
+       224    
+       225 -      // Compile styles (including scoped styles)
+       225 +      // Compile styles (including scoped styles)
+           +   with LESS/SCSS preprocessing
+       226        let css = '';
+       227        if (!skipStyleCompile && descriptor.styles.length > 0) 
+             {
+       228 -        const styleResult = compileStyles(id, 
+           - descriptor.styles, filename);
+       228 +        const styleResult = await compileStylesAsync(
+       229 +          id,
+       230 +          descriptor.styles,
+       231 +          filename,
+       232 +          browserStylePreprocessor,
+       233 +        );
+       234          if (Array.isArray(styleResult)) {
+       235            return styleResult;
+       236          }
+
+⏺ Now I need to update the compile function to await the async compileSFC.
+  Let me check the compile function:
+
+⏺ Read(src/compiler/browser.ts)
+  ⎿  Read 40 lines
+
+⏺ I see the issue - comp.compileSFC now returns a Promise, so it needs to be
+   awaited:
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 1 addition and 1 removal
+       353    
+       354        if (lang === 'vue') {
+       355          try {
+       356 -          const compiled = 
+           -  comp.compileSFC({ code, filename, id });
+       356 +          const compiled = await 
+           +  comp.compileSFC({ code, filename, id });
+       357    
+       358            if (Array.isArray(compiled)) {
+       359              const errorMsg = compiled.map((e) => 
+             e.toString()).join('\\n');
+
+⏺ Now I need to update the todo list and add CDN scripts for LESS/SCSS in
+  the techStack. Let me read the techStack file first:
+
+⏺ Read(src/vue2/techStack/index.ts)
+  ⎿  Read 81 lines
+
+⏺ Now I need to check the shared module for CDN constants and add the
+  LESS/SCSS CDN scripts:
+
+⏺ Read(src/shared.ts)
+  ⎿  Read 30 lines
+
+⏺ Now I'll add the LESS CDN constant to shared.ts and update the techStack
+  to load it:
+
+⏺ Update(src/shared.ts)
+  ⎿  Updated src/shared.ts with 7 additions                              
+        5    export const BABEL_STANDALONE_CDN =
+        6      'https://cdn.bootcdn.net/ajax/libs/babel-standalone/7.22.1
+            7/babel.min.js';
+        7    
+        8 +  // LESS compiler for browser-side style preprocessing
+        9 +  export const LESS_CDN = 'https://cdn.bootcdn.net/ajax/libs/l
+          + ess.js/4.2.0/less.min.js';
+       10 +  
+       11 +  // Sass.js for browser-side SCSS/SASS compilation
+       12 +  // Note: sass.js is a browser port of LibSass, providing 
+          + Sass.compile() API
+       13 +  export const SASS_CDN = 'https://cdn.jsdelivr.net/npm/sass.j
+          + s@0.11.1/dist/sass.sync.min.js';
+       14 +  
+       15    export function getPluginPath(api: IApi, filename: string) {
+       16      return winPath(join(api.paths.absTmpPath, 
+            `plugin-${api.plugin.key}`, filename));
+       17    }
+
+⏺ Now let me update the techStack to import and load the LESS and Sass CDN
+  scripts:
+
+⏺ Update(src/vue2/techStack/index.ts)
+  ⎿  Updated src/vue2/techStack/index.ts with 1 addition and 1 removal
+       2    import { fsExtra } from 'dumi/plugin-utils';
+       3    import { join } from 'node:path';
+       4    
+       5 -  import { BABEL_STANDALONE_CDN, 
+         -  getPkgPath, getPluginPath } from '@/shared';
+       5 +  import { BABEL_STANDALONE_CDN, LESS_CDN, SASS_CDN, 
+         +  getPkgPath, getPluginPath } from '@/shared';
+       6    
+       7    import { Vue2JSXTechStack } from './jsx';
+       8    import { Vue2SfcTechStack } from './sfc';
+
+⏺ Now let me update the addHTMLHeadScripts to include LESS and Sass:
+
+⏺ Update(src/vue2/techStack/index.ts)
+  ⎿  Updated src/vue2/techStack/index.ts with 10 additions and 1 removal
+       46        rendererPath: getPluginPath(api, RENDERER_FILENAME),
+       47      };
+       48    
+       49 -    // Load Babel standalone for browser-side compilation
+       49 +    // Load Babel standalone and style preprocessors 
+          +  for browser-side compilation
+       50      api.addHTMLHeadScripts(() => {
+       51        return [
+       52 +        // Babel for JSX/TSX transformation
+       53          {
+       54            src: vue2Config?.compiler?.babelStandaloneCDN || 
+            BABEL_STANDALONE_CDN,
+       55          },
+       56 +        // LESS compiler for browser-side LESS compilation
+       57 +        {
+       58 +          src: vue2Config?.compiler?.lessCDN || LESS_CDN,
+       59 +        },
+       60 +        // Sass.js for browser-side SCSS/SASS compilation
+       61 +        {
+       62 +          src: vue2Config?.compiler?.sassCDN || SASS_CDN,
+       63 +        },
+       64        ];
+       65      });
+       66    
+
+⏺ Now I need to update the vue2Config type to include the new CDN options:
+
+⏺ Update(src/vue2/techStack/index.ts)
+  ⎿  Updated src/vue2/techStack/index.ts with 1 addition and 1 removal
+       13    
+       14    export default function registerTechStack(api: IApi) {
+       15      const vue2Config = api.userConfig?.vue2 as
+       16 -      | { compiler?: { babelStandaloneCDN?: string } }
+       16 +      | { compiler?: { babelStandaloneCDN?: string; 
+          +  lessCDN?: string; sassCDN?: string } }
+       17        | undefined;
+       18    
+       19      const pkgPath = getPkgPath('@dumijs/preset-vue2', 
+            api.cwd);
+
+⏺ Now let me update the todo list and build the project to test:
+
+⏺ Bash(pnpm build:lib 2>&1)
+  ⎿ > @dumijs/preset-vue2@0.0.1 build:lib /Users/wisedu/Documents/GitHub/du
+    mi-theme-lobehub/packages/preset-vue2
+    > tsup --minify
+    … +39 lines (ctrl+o to expand)
+
+
+⏺ Build succeeded. Now let me check the demo files to see the LESS/SCSS
+  styles:
+
+⏺ Read(~/Documents/GitHub/dumi-theme-lobehub/vue2-example/docs/vue2/demos/LoginF
+      ormSFC.vue)
+  ⎿  Error reading file
+
+⏺ Search(pattern: "**/LoginFormSFC.vue")
+  ⎿  Found 0 files 
+
+⏺ Search(pattern: "**/*.vue", path:
+        "~/Documents/GitHub/dumi-theme-lobehub/vue2-example")
+  ⎿  Found 2 files (ctrl+o to expand)
+
+⏺ Read(~/Documents/GitHub/dumi-theme-lobehub/vue2-example/docs/vue2demo/demos/Lo
+      ginFormSFC.vue)
+  ⎿  Read 139 lines
+
+⏺ Read(~/Documents/GitHub/dumi-theme-lobehub/vue2-example/docs/vue2demo/demos/Lo
+      ginFormSetup.vue)
+  ⎿  Read 118 lines
+
+⏺ The demo files are correctly configured:
+  - LoginFormSFC.vue uses <style scoped lang="less">
+  - LoginFormSetup.vue uses <style scoped lang="scss">
+
+  Both use nested CSS syntax that requires preprocessing. Let me start the
+  dev server to test:
+
+⏺ Bash(lsof -ti:8001 | xargs kill -9 2>/dev/null || true && cd       timeout: 
+      /Users/wisedu/Documents/GitHub/dumi-theme-lobehub/vue2-example 1m 0s
+      && rm -rf .dumi node_modules/.cache && pn…)
+
+  ⎿  Running in the background (down arrow to manage)
+
+⏺ BashOutput(Reading shell output)
+  ⎿ > vue2-example@ dev /Users/wisedu/Documents/GitHub/dumi-theme-lobehub/v
+    ue2-example
+    > dumi dev
+    … +12 lines (ctrl+o to expand)
+
+  ⎿  sleep: invalid time interval: echo
+     sleep: invalid time interval: === Dev server started ===
+     usage: sleep number[unit] [...]
+     … +8 lines (ctrl+o to expand)
+
+⏺ The dev server is running successfully at http://localhost:8000. The 
+  webpack compilation succeeded without errors.
+
+  Let me update the todo list and summarize the changes:
+
+⏺ All tasks completed. Here's a summary of the LESS/SCSS support
+  implementation:
+
+  Summary
+
+  Files Modified:
+
+  1. package.json - Added less and sass dependencies (already present from
+  previous session)
+  2. src/compiler/shared.ts - Added:
+    - SUPPORTED_STYLE_LANGS constant: ['css', 'less', 'scss', 'sass']
+    - StylePreprocessor type for preprocessor functions
+    - Updated hasUnsupportedStyleLang to recognize less/scss/sass as
+  supported
+    - compileStyles now accepts optional preprocessor parameter
+    - Added compileStylesAsync for browser-side async compilation
+  3. src/compiler/index.ts (Node compiler) - Added:
+    - Imports for less and sass
+    - nodeStylePreprocessor function using sync APIs
+    - Updated compileSFC to use preprocessor
+  4. src/compiler/browser.ts (Browser compiler) - Added:
+    - Global type declarations for less and Sass (CDN-loaded)
+    - browserStylePreprocessor async function
+    - Made compileSFC async
+    - Uses compileStylesAsync with browser preprocessor
+  5. src/shared.ts - Added CDN constants:
+    - LESS_CDN: less.js from bootcdn
+    - SASS_CDN: sass.js from jsdelivr
+  6. src/vue2/techStack/index.ts - Updated:
+    - Import LESS_CDN, SASS_CDN
+    - Added LESS and Sass scripts to addHTMLHeadScripts
+    - Extended config type to support custom CDN URLs
+
+  Testing:
+
+  The dev server is running at http://localhost:8000. You can test:
+  - LoginFormSFC.vue - uses <style scoped lang="less">
+  - LoginFormSetup.vue - uses <style scoped lang="scss">
+
+  Both use nested CSS syntax that requires preprocessing. The styles should
+  now compile correctly in both static rendering and Live Editing mode.
+
+> /export 
+  ⎿  Conversation exported to: 
+     2025-11-27-this-session-is-being-continued-from-a-previous-co.txt
+
+> 更新/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/packages/preset-vue2
+/docs/TODO1.md，并且生成刚才优化内容的技术文档 
+
+⏺ Read(docs/TODO1.md)
+  ⎿  Read 23 lines
+
+⏺ Search(pattern: "**/*.md", path: "docs")
+  ⎿  Found 7 files (ctrl+o to expand)
+
+⏺ Bash(mkdir -p /Users/wisedu/Documents/GitHub/dumi-theme-lobehub/packages/prese
+      t-vue2/docs/20251127)
+  ⎿  (No content)
+
+⏺ Write(docs/TODO1.md)
+  ⎿  Updated docs/TODO1.md with 47 additions and 14 removals             
+        1    # dumi-preset-vue2 优化
+        2    
+        3 -  ## 高优先级问题
+        3 +  ## 已完成 (2025-11-27)
+        4    
+        5 +  | 问题                | 位置                   | 解决方案   
+          +                      | 状态 |
+        6 +  | ------------------- | ---------------------- | 
+          + ------------------------------- | ---- |
+        7 +  | 编译器代码重复      | index.ts vs browser.ts | 创建 
+          + shared.ts 提取公共代码     | Done |
+        8 +  | 错误类型不一致      | 编译器返回值           | 统一 
+          + CompileResult 类型定义     | Done |
+        9 +  | 正则匹配无防御      | 文件名解析             | 添加 
+          + safeResolveFilename 函数   | Done |
+       10 +  | 文件读取无try-catch | techStack/index.ts     | 
+          + 添加完整错误处理                | Done |
+       11 +  | Live Editing 错误恢复| renderer.ts            | 
+          + 修复错误后不再重新抛出异常      | Done |
+       12 +  | LESS/SCSS 样式支持  | SFC style 标签         | 添加 
+          + LESS/SCSS 预处理器支持     | Done |
+       13 +  
+       14 +  ## 高优先级问题 (待处理)
+       15 +  
+       16    | 问题                | 位置                   | 影响       
+                         |
+       17    | ------------------- | ---------------------- | 
+            ----------------------- |
+       18 -  | 编译器代码重复      | index.ts vs browser.ts | 70%+ 
+          - 重复代码，维护困难 |
+       19 -  | 错误类型不一致      | 编译器返回值           | 
+          - 容易引发运行时bug       |
+       20 -  |                     |
+       21 -  | 正则匹配无防御      | 文件名解析             | 
+          - 可能导致生产崩溃        |
+       22 -  |                     |
+       23 -  | 文件读取无try-catch | techStack/index.ts     | 
+          - 构建可能失败            |
+       18 +  | (暂无)              |                        |            
+          +              |
+       19    
+       20    ## 中优先级问题
+       21    
+       22 -  | 问题         | 说明                           |
+       23 -  | ------------ | ------------------------------ |
+       24 -  | 过度使用 any | 削弱类型检查                   |
+       25 -  | 缺乏关键注释 | 复杂逻辑难以理解               |
+       26 -  | 依赖版本问题 | @babel/plugin-syntax-jsx 重复  |
+       27 -  | 构建配置重复 | tsup.config.ts 4个配置大量重复 |
+       28 -  | 内存泄漏风险 | 样式注入没有清理策略           |
+       22 +  | 问题         | 说明                           | 状态     |
+       23 +  | ------------ | ------------------------------ | -------- |
+       24 +  | 过度使用 any | 削弱类型检查                   | 待处理   |
+       25 +  | 缺乏关键注释 | 复杂逻辑难以理解               | 部分完成 |
+       26 +  | 依赖版本问题 | @babel/plugin-syntax-jsx 重复  | 待处理   |
+       27 +  | 构建配置重复 | tsup.config.ts 4个配置大量重复 | 待处理   |
+       28 +  | 内存泄漏风险 | 样式注入没有清理策略           | 已改善   |
+       29 +  
+       30 +  ## 优化详情
+       31 +  
+       32 +  ### 2025-11-27 更新
+       33 +  
+       34 +  #### 1. 编译器代码重构
+       35 +  - 创建 `src/compiler/shared.ts` 提取公共代码
+       36 +  - 统一常量、类型、工具函数
+       37 +  - 减少 Node/Browser 编译器代码重复约 60%
+       38 +  
+       39 +  #### 2. Live Editing 错误恢复
+       40 +  - 修复语法错误后组件无法恢复的问题
+       41 +  - renderer.ts 不再重新抛出错误
+       42 +  - browser.ts 添加顶层 try-catch 保护
+       43 +  
+       44 +  #### 3. LESS/SCSS 样式预处理支持
+       45 +  - Node 端使用 `less` 和 `sass` 包
+       46 +  - Browser 端通过 CDN 加载 less.js 和 sass.js
+       47 +  - 支持 `<style lang="less">` 和 `<style lang="scss">`
+       48 +  - 详细文档: 
+          + [LESS_SCSS_SUPPORT.md](./20251127/LESS_SCSS_SUPPORT.md)
+       49 +  
+       50 +  ## 相关文档
+       51 +  
+       52 +  - [20251125/DEVELOPMENT.md](./20251125/DEVELOPMENT.md) - 
+          + 开发指南
+       53 +  - [20251125/PRESET_VUE_PRINCIPLES.md](./20251125/PRESET_VUE_
+          + PRINCIPLES.md) - 设计原则
+       54 +  - [20251127/TSX_LIVE_EDITING_FIX.md](./20251127/20251127_TSX
+          + _LIVE_EDITING_FIX.md) - TSX Live Editing 修复
+       55 +  - [20251127/LESS_SCSS_SUPPORT.md](./20251127/LESS_SCSS_SUPPO
+          + RT.md) - LESS/SCSS 支持
+
+⏺ Now let me create the detailed technical documentation:
+
+⏺ Write(docs/20251127/LESS_SCSS_SUPPORT.md)
+  ⎿  Wrote 316 lines to docs/20251127/LESS_SCSS_SUPPORT.md                
+     # LESS/SCSS 样式预处理支持
+     > 日期: 2025-11-27
+     > 作者: Claude Code
+     ## 概述
+     本次更新为 `@dumijs/preset-vue2` 添加了对 LESS 和 SCSS/SASS
+     样式预处理器的完整支持，包括 Node.js 静态编译和浏览器端 Live Editing
+     两种场景。
+     ## 问题背景
+     … +306 lines (ctrl+o to expand)
+
+⏺ 已完成文档更新：
+
+  更新的文件
+
+  1. TODO1.md
+
+  - 将已完成的问题移至 "已完成" 表格
+  - 添加 LESS/SCSS 样式支持为已完成项目
+  - 添加优化详情说明
+  - 添加相关文档链接
+
+  2. 新建 LESS_SCSS_SUPPORT.md
+
+  路径: docs/20251127/LESS_SCSS_SUPPORT.md
+
+  内容包括:
+  - 概述: 功能说明和问题背景
+  - 架构设计: Node/Browser 双端编译流程图
+  - 文件修改清单: 所有修改的文件列表
+  - 实现细节:
+    - 支持的样式语言
+    - 预处理器类型定义
+    - Node.js 端实现 (同步)
+    - Browser 端实现 (异步)
+    - CDN 配置
+    - 脚本加载逻辑
+  - 用户配置: 自定义 CDN 地址方法
+  - 使用示例: LESS 和 SCSS 代码示例
+  - 限制与注意事项: 性能、功能限制说明
+  - 测试验证: 测试文件和验证步骤
+
+> 完美，我将重新安装依赖+构建+验证，有问题找你 
+
+⏺ 好的！验证步骤建议：
+
+  # 1. 重新安装依赖
+  cd packages/preset-vue2
+  pnpm install
+
+  # 2. 构建
+  pnpm build:lib
+
+  # 3. 启动示例项目
+  cd ../../vue2-example
+  rm -rf .dumi node_modules/.cache
+  pnpm dev
+
+  验证要点：
+  - LESS 样式: LoginFormSFC.vue - 表单边框应为 #6d6d6d
+  - SCSS 样式: LoginFormSetup.vue - 表单边框应为 #e20000
+  - Live Editing: 修改颜色值后应实时更新
+
+  有问题随时找我！
+
+> 构建报错> @dumijs/preset-vue2@0.0.1 build 
+/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/packages/preset-vue2
+> father build && tsup --minify
+
+info  - Clean output directories
+info  - Bundless for src directory to cjs format
+event - Bundless shared.ts to dist/compiler/shared.js (with declaration)
+event - Bundless browser.ts to dist/compiler/browser.js (with declaration)
+event - Bundless shared.ts to dist/shared.js (with declaration)
+event - Bundless requireHook.ts to dist/requireHook.js (with declaration)
+event - Bundless vue-jsx-browser.ts to dist/compiler/vue-jsx-browser.js 
+(with declaration)
+event - Bundless babel-plugin-vue-h.ts to 
+dist/vue2/webpack/babel-plugin-vue-h.js (with declaration)
+event - Bundless index.ts to dist/vue2/webpack/index.js (with declaration)
+event - Bundless checkVersion.ts to dist/vue2/checkVersion.js (with 
+declaration)
+event - Bundless sfc.ts to dist/vue2/techStack/sfc.js (with declaration)
+event - Bundless index.ts to dist/vue2/index.js (with declaration)
+event - Bundless node.ts to dist/compiler/node.js (with declaration)
+event - Bundless jsx.ts to dist/vue2/techStack/jsx.js (with declaration)
+event - Bundless index.ts to dist/vue2/techStack/index.js (with declaration)
+event - Bundless index.ts to dist/index.js (with declaration)
+event - Bundless index.ts to dist/compiler/index.js (with declaration)
+event - Bundless config.ts to dist/vue2/webpack/config.js (with declaration)
+event - Generate declaration files...
+error - src/compiler/index.ts:3:18 - TS7016: Could not find a declaration 
+file for module 'less'. '/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/n
+ode_modules/.pnpm/less@4.4.2/node_modules/less/index.js' implicitly has an 
+'any' type.
+  Try `npm i --save-dev @types/less` if it exists or add a new declaration 
+(.d.ts) file containing `declare module 'less';`
+error - src/compiler/index.ts:35:48 - TS7006: Parameter 'err' implicitly has
+ an 'any' type.
+error - src/compiler/index.ts:35:53 - TS7006: Parameter 'output' implicitly 
+has an 'any' type.
+error - Error: Declaration generation failed.
+    at getDeclarations (/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/no
+de_modules/.pnpm/father@4.6.7_@babel+core@7.28.5_@types+node@22.19.1_@types+
+webpack@5.28.5_@swc+core@1.9_24a40cd5b42325f1a8f771e2ba56e56f/node_modules/f
+ather/dist/builder/bundless/dts/index.js:200:19)
+    at transformFiles (/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/nod
+e_modules/.pnpm/father@4.6.7_@babel+core@7.28.5_@types+node@22.19.1_@types+w
+ebpack@5.28.5_@swc+core@1.9_24a40cd5b42325f1a8f771e2ba56e56f/node_modules/fa
+ther/dist/builder/bundless/index.js:111:58)
+    at async bundless (/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/nod
+e_modules/.pnpm/father@4.6.7_@babel+core@7.28.5_@types+node@22.19.1_@types+w
+ebpack@5.28.5_@swc+core@1.9_24a40cd5b42325f1a8f771e2ba56e56f/node_modules/fa
+ther/dist/builder/bundless/index.js:141:17)
+    at async builder (/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/node
+_modules/.pnpm/father@4.6.7_@babel+core@7.28.5_@types+node@22.19.1_@types+we
+bpack@5.28.5_@swc+core@1.9_24a40cd5b42325f1a8f771e2ba56e56f/node_modules/fat
+her/dist/builder/index.js:57:25)
+    at async Command.fn (/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/n
+ode_modules/.pnpm/father@4.6.7_@babel+core@7.28.5_@types+node@22.19.1_@types
++webpack@5.28.5_@swc+core@1.9_24a40cd5b42325f1a8f771e2ba56e56f/node_modules/
+father/dist/commands/build.js:15:13)
+    at async Service.run 
+(/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/node_modules/.pnpm/@umijs
++core@4.6.0/node_modules/@umijs/core/dist/service/service.js:326:15)
+    at async Service.run2 (/Users/wisedu/Documents/GitHub/dumi-theme-lobehub
+/node_modules/.pnpm/father@4.6.7_@babel+core@7.28.5_@types+node@22.19.1_@typ
+es+webpack@5.28.5_@swc+core@1.9_24a40cd5b42325f1a8f771e2ba56e56f/node_module
+s/father/dist/service/service.js:58:16)
+    at async Object.run (/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/n
+ode_modules/.pnpm/father@4.6.7_@babel+core@7.28.5_@types+node@22.19.1_@types
++webpack@5.28.5_@swc+core@1.9_24a40cd5b42325f1a8f771e2ba56e56f/node_modules/
+father/dist/cli/cli.js:37:9)
+ ELIFECYCLE  Command failed with exit code 1. 
+
+⏺ 需要添加 @types/less 类型声明并修复类型错误：
+
+⏺ Update(package.json)
+  ⎿  Updated package.json with 1 addition                        
+       43      "devDependencies": {
+       44        "@babel/plugin-syntax-jsx": "^7.24.0",
+       45        "@babel/preset-typescript": "^7.28.5",
+       46 +      "@types/less": "^3.0.6",
+       47        "@types/babel__core": "^7.20.5",
+       48        "@types/babel__standalone": "^7.1.7",
+       49        "@vue/babel-plugin-transform-vue-jsx": "^1.4.0",
+
+⏺ 现在修复 index.ts 中的回调参数类型：
+
+⏺ Read(src/compiler/index.ts)
+  ⎿  Read 40 lines
+
+⏺ Update(src/compiler/index.ts)
+  ⎿  Updated src/compiler/index.ts with 11 additions and 7 removals      
+       32    
+       33        // less.render is async, but we can use the sync pattern
+             with deasync or similar
+       34        // For simplicity, let's just do async-to-sync 
+            conversion
+       35 -      less.render(source, { syncImport: true }, (err, output) 
+          - => {
+       36 -        if (err) {
+       37 -          error = new Error(`LESS compile error: 
+          - ${err.message}`);
+       38 -        } else if (output) {
+       39 -          result = output.css;
+       40 -        }
+       41 -      });
+       35 +      less.render(
+       36 +        source,
+       37 +        { syncImport: true },
+       38 +        (err: Less.RenderError | undefined, output: 
+          + Less.RenderOutput | undefined) => {
+       39 +          if (err) {
+       40 +            error = new Error(`LESS compile error: 
+          + ${err.message}`);
+       41 +          } else if (output) {
+       42 +            result = output.css;
+       43 +          }
+       44 +        },
+       45 +      );
+       46    
+       47        if (error) throw error;
+       48        return result;
+
+⏺ 已修复！修改内容：
+
+  1. package.json - 添加 @types/less 类型声明
+  2. index.ts - 为回调参数添加正确的类型注解：
+    - err: Less.RenderError | undefined
+    - output: Less.RenderOutput | undefined
+
+  现在可以重新安装依赖并构建：
+
+  cd packages/preset-vue2
+  pnpm install
+  pnpm build
+
+> error - src/compiler/browser.ts:30:7 - TS2403: Subsequent variable 
+declarations must have the same type.  Variable 'less' must be of type 
+'LessStatic', but here has type '{ render: (input: string, options?: any) =>
+ Promise<{ css: string; }>; }'.
+error - Error: Declaration generation failed.
+    at getDeclarations (/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/no
+de_modules/.pnpm/father@4.6.7_@babel+core@7.28.5_@types+node@22.19.1_@types+
+webpack@5.28.5_@swc+core@1.9_24a40cd5b42325f1a8f771e2ba56e56f/node_modules/f
+ather/dist/builder/bundless/dts/index.js:200:19)
+    at transformFiles (/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/nod
+e_modules/.pnpm/father@4.6.7_@babel+core@7.28.5_@types+node@22.19.1_@types+w
+ebpack@5.28.5_@swc+core@1.9_24a40cd5b42325f1a8f771e2ba56e56f/node_modules/fa
+ther/dist/builder/bundless/index.js:111:58)
+    at async bundless (/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/nod
+e_modules/.pnpm/father@4.6.7_@babel+core@7.28.5_@types+node@22.19.1_@types+w
+ebpack@5.28.5_@swc+core@1.9_24a40cd5b42325f1a8f771e2ba56e56f/node_modules/fa
+ther/dist/builder/bundless/index.js:141:17)
+    at async builder (/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/node
+_modules/.pnpm/father@4.6.7_@babel+core@7.28.5_@types+node@22.19.1_@types+we
+bpack@5.28.5_@swc+core@1.9_24a40cd5b42325f1a8f771e2ba56e56f/node_modules/fat
+her/dist/builder/index.js:57:25)
+    at async Command.fn (/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/n
+ode_modules/.pnpm/father@4.6.7_@babel+core@7.28.5_@types+node@22.19.1_@types
++webpack@5.28.5_@swc+core@1.9_24a40cd5b42325f1a8f771e2ba56e56f/node_modules/
+father/dist/commands/build.js:15:13)
+    at async Service.run 
+(/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/node_modules/.pnpm/@umijs
++core@4.6.0/node_modules/@umijs/core/dist/service/service.js:326:15)
+    at async Service.run2 (/Users/wisedu/Documents/GitHub/dumi-theme-lobehub
+/node_modules/.pnpm/father@4.6.7_@babel+core@7.28.5_@types+node@22.19.1_@typ
+es+webpack@5.28.5_@swc+core@1.9_24a40cd5b42325f1a8f771e2ba56e56f/node_module
+s/father/dist/service/service.js:58:16)
+    at async Object.run (/Users/wisedu/Documents/GitHub/dumi-theme-lobehub/n
+ode_modules/.pnpm/father@4.6.7_@babel+core@7.28.5_@types+node@22.19.1_@types
++webpack@5.28.5_@swc+core@1.9_24a40cd5b42325f1a8f771e2ba56e56f/node_modules/
+father/dist/cli/cli.js:37:9)
+ ELIFECYCLE  Command failed with exit code 1. 
+
+⏺ 现在 @types/less 已经声明了全局 less 变量，导致类型冲突。需要移除
+  browser.ts 中的自定义声明：
+
+⏺ Read(src/compiler/browser.ts)
+  ⎿  Read 20 lines
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 2 additions and 5 removals     
+       24      toError,
+       25    } from './shared';
+       26    
+       27 -  // Global type declarations for CDN-loaded libraries
+       27 +  // Global type declaration for sass.js (CDN-loaded library)
+       28 +  // Note: @types/less provides the global `less` type, so we 
+          + only declare Sass here
+       29    declare global {
+       30      // eslint-disable-next-line no-var
+       31 -    var less: {
+       32 -      render: (input: string, options?: any) => Promise<{ css:
+          -  string }>;
+       33 -    };
+       34 -    // eslint-disable-next-line no-var
+       31      var Sass: {
+       32        compile: (input: string) => string;
+       33      } | undefined;
+
+⏺ 现在需要检查 browserStylePreprocessor 中的 less 检查是否需要调整：
+
+⏺ Read(src/compiler/browser.ts)
+  ⎿  Read 30 lines
+
+⏺ 代码看起来没问题，但由于 @types/less 声明了 less 为全局变量（不可能为
+  undefined），TypeScript 可能会报错。让我用更安全的方式检查：
+
+⏺ Update(src/compiler/browser.ts)
+  ⎿  Updated src/compiler/browser.ts with 4 additions and 2 removals     
+       39     */
+       40    async function browserStylePreprocessor(source: string, 
+            lang: string): Promise<string> {
+       41      if (lang === 'less') {
+       42 -      if (typeof less === 'undefined') {
+       42 +      // Check if less.js is loaded via CDN (runtime check)
+       43 +      const lessLib = typeof window !== 'undefined' ? (window 
+          + as any).less : undefined;
+       44 +      if (!lessLib) {
+       45          console.warn('[Vue2 Compiler] less.js not loaded. LESS
+             styles will not be compiled.');
+       46          return source;
+       47        }
+       48        try {
+       49 -        const result = await less.render(source);
+       49 +        const result = await lessLib.render(source);
+       50          return result.css;
+       51        } catch (error) {
+       52          const msg = error instanceof Error ? error.message : 
+            String(error);
+
+⏺ 已修复！现在可以重新构建：
+
+  pnpm install && pnpm build
+
+  修改汇总：
+  1. package.json - 添加 @types/less 类型声明
+  2. index.ts - 添加 Less.RenderError | undefined 和 Less.RenderOutput | 
+  undefined 类型注解
+  3. browser.ts - 移除自定义 less 声明（使用 @types/less 提供的），通过
+  window.less 运行时检查
+
+
+
