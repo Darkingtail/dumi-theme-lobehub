@@ -7,13 +7,25 @@ const env = babelPresetEnv();
 const typescript = babelPresetTypeScript();
 
 export const compiler: ReturnType<typeof createCompiler> = createCompiler({
-  availablePlugins: {},
+  availablePlugins: {
+    // Use custom fixed JSX plugin instead of official one
+    // The official @vue/babel-plugin-transform-vue-jsx has a bug with on:click syntax
+    // See: compiled/vue2-jsx-plugin.js for details
+    'vue2-jsx-fixed': require.resolve('../compiled/vue2-jsx-plugin'),
+  },
   availablePresets: {
     env,
     typescript,
-    // Vue 2 JSX preset with injectH: false
-    // This is critical for Composition API setup() functions where this.$createElement doesn't exist
-    'vue2-jsx': [require.resolve('@vue/babel-preset-jsx'), { injectH: false }],
+    // Vue 2 JSX sugar plugins
+    // Note: Using custom transform plugin to fix on:click bug
+    'vue2-jsx': {
+      plugins: [
+        require.resolve('@vue/babel-sugar-functional-vue'),
+        require.resolve('@vue/babel-sugar-v-model'),
+        require.resolve('@vue/babel-sugar-v-on'),
+        'vue2-jsx-fixed', // Use our fixed plugin instead of @vue/babel-plugin-transform-vue-jsx
+      ],
+    },
   },
   babel,
 });

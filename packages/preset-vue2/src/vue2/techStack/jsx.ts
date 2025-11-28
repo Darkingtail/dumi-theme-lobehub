@@ -1,12 +1,16 @@
 import type { IDumiTechStackRuntimeOpts } from 'dumi/tech-stack-utils';
 import { defineTechStack, wrapDemoWithFn } from 'dumi/tech-stack-utils';
 import hashId from 'hash-sum';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { compile } from '@/compiler/node';
 import type { JsxIncludesConfig } from '@/shared';
 
 interface Vue2JSXTechStackOptions {
   jsxIncludes?: JsxIncludesConfig;
+  /** Additional modules to include in live editing context */
+  resolveMap?: string[];
   runtimeOpts: IDumiTechStackRuntimeOpts;
 }
 
@@ -77,8 +81,78 @@ function looksLikeReactCode(code: string): boolean {
   return reactPatterns.some((pattern) => pattern.test(code));
 }
 
-export const Vue2JSXTechStack = ({ runtimeOpts, jsxIncludes }: Vue2JSXTechStackOptions) =>
+export const Vue2JSXTechStack = ({
+  runtimeOpts,
+  jsxIncludes,
+  resolveMap: userResolveMap,
+}: Vue2JSXTechStackOptions) =>
   defineTechStack({
+    /**
+     * Ensure asset.dependencies has FILE entries for proper PreviewerActions rendering.
+     * This is needed because dumi's block.js only adds FILE dependencies for extensions
+     * in DEFAULT_DEMO_MODULE_EXTENSIONS (.js, .jsx, .ts, .tsx), but sometimes dependencies
+     * may not be added properly. This ensures they are always present.
+     */
+    generateMetadata(asset, opts) {
+      // Check if there are any FILE dependencies
+      const hasFileEntry = Object.values(asset.dependencies).some((dep) => dep.type === 'FILE');
+
+      if (!hasFileEntry) {
+        // Read the source file and add it as FILE dependency
+        let sourceCode = opts.entryPointCode || '';
+        if (!sourceCode && opts.fileAbsPath) {
+          try {
+            sourceCode = fs.readFileSync(opts.fileAbsPath, 'utf8');
+          } catch {
+            // If file can't be read, use empty string
+            sourceCode = '';
+          }
+        }
+
+        // Determine the entry filename and extension
+        const entryFilename = opts.fileAbsPath
+          ? path.basename(opts.fileAbsPath)
+          : asset.entry || 'index.tsx';
+
+        // Add the FILE dependency
+        asset.dependencies[entryFilename] = {
+          type: 'FILE',
+          value: sourceCode,
+        };
+
+        // Ensure entry is set
+        if (!asset.entry) {
+          asset.entry = entryFilename;
+        }
+      }
+
+      return asset;
+    },
+
+    /**
+     * Add Vue and other modules to the resolveMap for live editing support.
+     * This ensures that `require('vue')` and other modules can resolve in the browser context.
+     */
+    generateSources(resolveMap) {
+      // Add 'vue' to resolveMap so it's available in live editing context
+      if (!resolveMap['vue']) {
+        resolveMap['vue'] = 'vue';
+      }
+      // Add Vue JSX babel helper (commonly needed for Vue JSX transformation)
+      if (!resolveMap['@vue/babel-helper-vue-jsx-merge-props']) {
+        resolveMap['@vue/babel-helper-vue-jsx-merge-props'] =
+          '@vue/babel-helper-vue-jsx-merge-props';
+      }
+      // Add user-configured modules
+      if (userResolveMap) {
+        for (const mod of userResolveMap) {
+          if (!resolveMap[mod]) {
+            resolveMap[mod] = mod;
+          }
+        }
+      }
+      return resolveMap;
+    },
     isSupported(node, lang: string) {
       // Check file extension first
       if (!['jsx', 'tsx'].includes(lang)) {

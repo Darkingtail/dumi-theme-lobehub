@@ -52,3 +52,9 @@ Vue 2.7 Composition API with setup() returning JSX render function:
 Vue 2.7 Vue.extend
 
 <code src="./vue2demo/demos/LoginFormExtend.tsx"></code>
+
+## Test Attribute bug Demo
+
+Test Attribute bug
+
+<code src="./vue2demo/demos/TestAttributeBug.tsx"></code>

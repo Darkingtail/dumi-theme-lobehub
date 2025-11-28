@@ -3,8 +3,6 @@ import type { IApi } from 'dumi';
 import path from 'node:path';
 import VueLoaderPlugin from 'vue-loader/lib/plugin';
 
-import babelPluginVueH from './babel-plugin-vue-h';
-
 // Webpack configuration for Vue 2
 
 export function getConfig(config: Config, api: IApi) {
@@ -17,11 +15,11 @@ export function getConfig(config: Config, api: IApi) {
 
   // Vue 2 JSX/TSX support for demo files with techStack query
   // Only process files with ?techStack=vue2-tsx query to avoid breaking React JSX
-  // Use @vue/babel-preset-jsx with injectH: false for Composition API support
+  // Use custom fixed JSX plugin to avoid on:click bug in official plugin
   //
   // IMPORTANT: Babel presets run in REVERSE order (last to first), so:
   // 1. TypeScript preset runs FIRST (last in array) - strips type annotations
-  // 2. Vue JSX preset runs SECOND - transforms JSX to h() calls
+  // 2. Vue JSX plugins run SECOND - transforms JSX to h() calls
   // We exclude umi's presets because they may include React JSX transform
   config.module
     .rule('vue2-jsx-tsx')
@@ -30,13 +28,19 @@ export function getConfig(config: Config, api: IApi) {
     .use('babel-loader')
     .loader(babelInUmi.loader)
     .options({
-      // Keep essential plugins from umi, plus our h injection plugin
-      plugins: [...(babelInUmi.options.plugins || []), babelPluginVueH],
+      // Keep essential plugins from umi
+      // Plus Vue JSX transformation plugins (using custom fixed version)
+      // Note: babelPluginVueH is NOT needed - custom plugin auto-injects h
+      plugins: [
+        ...(babelInUmi.options.plugins || []),
+        require.resolve('@vue/babel-sugar-functional-vue'),
+        require.resolve('@vue/babel-sugar-v-model'),
+        require.resolve('@vue/babel-sugar-v-on'),
+        require.resolve('../../compiled/vue2-jsx-plugin'), // Custom fixed plugin (auto-injects h)
+      ],
 
       // Don't inherit umi's presets - they may include React JSX transform
       presets: [
-        // Vue JSX preset runs SECOND (after TS strips types)
-        [require.resolve('@vue/babel-preset-jsx'), { injectH: false }],
         // TypeScript preset runs FIRST (last in reverse order)
         [tsPresetPath, { allExtensions: true, isTSX: true, onlyRemoveTypeImports: true }],
       ],

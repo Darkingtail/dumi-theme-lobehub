@@ -13,12 +13,11 @@
   "types": "dist/index.d.ts",
   "files": [
     "lib",
-    "dist",
-    "compiled"
+    "dist"
   ],
   "scripts": {
-    "build": "father build && tsup --minify",
-    "build:deps": "father prebundle",
+    "build": "father build && tsup --minify && npm run build:copy-compiled",
+    "build:copy-compiled": "mkdir -p dist/compiled && cp -r compiled/* dist/compiled/",
     "build:lib": "tsup --minify",
     "dev": "father dev",
     "test": "vitest"

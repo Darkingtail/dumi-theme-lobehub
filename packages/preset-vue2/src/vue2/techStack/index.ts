@@ -24,6 +24,7 @@ export default function registerTechStack(api: IApi) {
     | {
         compiler?: { babelStandaloneCDN?: string; lessCDN?: string; sassCDN?: string };
         jsxIncludes?: JsxIncludesConfig;
+        resolveMap?: string[];
       }
     | undefined;
 
@@ -86,14 +87,19 @@ export default function registerTechStack(api: IApi) {
 
   // Register Vue 2 JSX/TSX tech stack (higher priority)
   api.register({
-    fn: () => Vue2JSXTechStack({ jsxIncludes: vue2Config?.jsxIncludes, runtimeOpts }),
+    fn: () =>
+      Vue2JSXTechStack({
+        jsxIncludes: vue2Config?.jsxIncludes,
+        resolveMap: vue2Config?.resolveMap,
+        runtimeOpts,
+      }),
     key: 'registerTechStack',
     stage: 0,
   });
 
   // Register Vue 2 SFC tech stack
   api.register({
-    fn: () => Vue2SfcTechStack(runtimeOpts),
+    fn: () => Vue2SfcTechStack({ resolveMap: vue2Config?.resolveMap, runtimeOpts }),
     key: 'registerTechStack',
     stage: 1,
   });

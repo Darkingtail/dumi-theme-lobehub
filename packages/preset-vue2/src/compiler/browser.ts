@@ -418,6 +418,14 @@ export async function compile(code: string, opts: { filename: string }) {
         const cjsResult = comp.toCommonJS(js);
         let cjsCode = cjsResult?.code || js;
 
+        // Remove CSS/style imports for live editing
+        // These styles are already loaded on initial page load, so we don't need them in live editing
+        // This handles patterns like: require("element-ui/lib/theme-chalk/index.css");
+        cjsCode = cjsCode.replace(
+          /require\s*\(\s*["'][^"']+\.(css|less|scss|sass|styl|stylus)["']\s*\)\s*;?/g,
+          '/* css import removed for live editing */',
+        );
+
         // For JSX/TSX files, inject h at the top after "use strict"
         // This is necessary because:
         // 1. @babel/preset-env converts `import { h } from 'vue'` to property access (_vue.h)

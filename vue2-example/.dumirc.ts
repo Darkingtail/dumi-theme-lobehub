@@ -64,5 +64,8 @@ export default {
     // Files in /react-demos/ will NOT be processed by Vue 2 preset
     // and will use dumi's default React tech stack instead
     jsxIncludes: ['vue2demo'],
+    // Additional modules to include in live editing context
+    // These modules will be available via require() in live editing
+    resolveMap: ['element-ui'],
   },
 };

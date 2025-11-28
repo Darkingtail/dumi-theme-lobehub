@@ -32,6 +32,12 @@ export interface Vue2Config {
   };
   /** JSX/TSX path include patterns. Default: true (all jsx/tsx files) */
   jsxIncludes?: JsxIncludesConfig;
+  /**
+   * Additional modules to include in live editing context.
+   * These modules will be available via require() in live editing.
+   * Example: ['element-ui', 'lodash']
+   */
+  resolveMap?: string[];
 }
 
 export const BABEL_STANDALONE_CDN =
