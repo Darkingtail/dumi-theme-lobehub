@@ -80,6 +80,9 @@ export function getConfig(config: Config, api: IApi) {
   };
 
   // Vue 2 SFC support with vue-loader@15
+  // HMR optimization: Enable hot reload for better development experience
+  const isDev = process.env.NODE_ENV !== 'production';
+
   config.module
     .rule('vue')
     .test(/\.vue$/)
@@ -89,6 +92,8 @@ export function getConfig(config: Config, api: IApi) {
     .loader(require.resolve('vue-loader'))
     .options({
       babelParserPlugins: ['jsx', 'classProperties', 'decorators-legacy', 'typescript'],
+      // Enable HMR in development mode
+      hotReload: isDev,
       // Specify loaders for TypeScript script blocks
       // This bypasses VueLoaderPlugin's rule cloning
       loaders: {

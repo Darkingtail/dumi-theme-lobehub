@@ -1,3 +1,4 @@
+import { logger } from 'dumi/plugin-utils';
 import type { IDumiTechStackRuntimeOpts } from 'dumi/tech-stack-utils';
 import { defineTechStack, wrapDemoWithFn } from 'dumi/tech-stack-utils';
 import hashId from 'hash-sum';
@@ -5,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { compile } from '@/compiler/node';
+import { createErrorComponentCode } from '@/compiler/shared';
 import type { JsxIncludesConfig } from '@/shared';
 
 interface Vue2JSXTechStackOptions {
@@ -215,14 +217,42 @@ export const Vue2JSXTechStack = ({
           return raw; // Return unchanged, let other tech stacks handle it
         }
 
-        const result = compile({
-          code: raw,
-          filename,
-          id: hashId(raw),
-        }) as string;
+        try {
+          const result = compile({
+            code: raw,
+            filename,
+            id: hashId(raw),
+          });
 
-        if (result) {
-          const code = wrapDemoWithFn(result, {
+          // P0 Optimization: Handle compilation errors
+          if (Array.isArray(result)) {
+            const errorMsg = result.map((e) => e.message || String(e)).join('\n');
+            logger.error('[Vue2 JSX Compile Error]', errorMsg);
+            const errorCode = createErrorComponentCode(errorMsg, raw);
+            const code = wrapDemoWithFn(errorCode, {
+              filename,
+              parserConfig: {
+                syntax: 'ecmascript',
+              },
+            });
+            return `(${code})()`;
+          }
+
+          if (result) {
+            const code = wrapDemoWithFn(result as string, {
+              filename,
+              parserConfig: {
+                syntax: 'ecmascript',
+              },
+            });
+            return `(${code})()`;
+          }
+        } catch (error) {
+          // P0 Optimization: Catch unexpected errors and show error component
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          logger.error('[Vue2 JSX Compile Error]', errorMsg);
+          const errorCode = createErrorComponentCode(errorMsg, raw);
+          const code = wrapDemoWithFn(errorCode, {
             filename,
             parserConfig: {
               syntax: 'ecmascript',

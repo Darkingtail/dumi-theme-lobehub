@@ -1,7 +1,7 @@
 <template>
   <el-card class="login-form-card">
     <div slot="header">
-      <span>SFC Demo - Login Form (TypeScript)</span>
+      <span>SFC Demo - Login Form (Options API)</span>
     </div>
     <el-form
       ref="loginForm"
@@ -45,17 +45,19 @@
 </template>
 
 <script lang="ts">
+// @ts-nocheck
 import { Button, Card, Form, FormItem, Input, Message, Option, Select } from 'element-ui';
 import 'element-ui/lib/theme-chalk/index.css';
 import Vue from 'vue';
 
-Vue.use(Card);
-Vue.use(Form);
-Vue.use(FormItem);
-Vue.use(Input);
-Vue.use(Select);
-Vue.use(Option);
-Vue.use(Button);
+// 注册 Element UI 组件
+Vue.component('el-card', Card);
+Vue.component('el-form', Form);
+Vue.component('el-form-item', FormItem);
+Vue.component('el-input', Input);
+Vue.component('el-select', Select);
+Vue.component('el-option', Option);
+Vue.component('el-button', Button);
 
 interface FormData {
   username: string;
@@ -77,16 +79,17 @@ interface Rules {
   region: RuleItem[];
 }
 
+// Options API 写法
 export default {
   name: 'LoginFormSFC',
-  data(): { loading: boolean; formData: FormData; rules: Rules } {
+  data() {
     return {
       loading: false,
       formData: {
         username: '',
         password: '',
         region: '',
-      },
+      } as FormData,
       rules: {
         username: [
           { required: true, message: 'Please enter username', trigger: 'blur' },
@@ -97,11 +100,11 @@ export default {
           { min: 6, message: 'Password should be at least 6 characters', trigger: 'blur' },
         ],
         region: [{ required: true, message: 'Please select region', trigger: 'change' }],
-      },
+      } as Rules,
     };
   },
   methods: {
-    handleSubmit(): void {
+    handleSubmit() {
       const form = this.$refs.loginForm as any;
       form.validate((valid: boolean) => {
         if (valid) {
@@ -118,7 +121,7 @@ export default {
         }
       });
     },
-    handleReset(): void {
+    handleReset() {
       const form = this.$refs.loginForm as any;
       form.resetFields();
     },

@@ -40,6 +40,7 @@ const optionalDeps = [
 ];
 
 export default {
+  apiParser: {},
   chainWebpack(config: any) {
     // Ignore optional dependencies that webpack can't resolve
     config.resolve.fallback.merge(
@@ -51,11 +52,15 @@ export default {
   },
   mfsu: false,
   presets: [require.resolve('@dumijs/preset-vue2')],
+  resolve: {
+    entryFile: './src/index.ts', // component entry file
+  },
   themeConfig: {
     name: 'Vue 2 Demo',
     nav: [
       { link: '/components', title: 'Components' },
       { link: '/react-demos', title: 'React Demos' },
+      { link: '/api-test', title: 'API Table' },
     ],
   },
   // Vue 2 preset configuration

@@ -1,7 +1,7 @@
 <template>
   <el-card class="login-form-card">
     <div slot="header">
-      <span>SFC Demo - Login Form (TypeScript)</span>
+      <span>SFC Demo - Login Form (Vue.extend)</span>
     </div>
     <el-form
       ref="loginForm"
@@ -41,16 +41,13 @@
           Login
         </el-button>
         <el-button @click="handleReset">Reset</el-button>
-        <el-button @click="handleReset">Reset</el-button>
-        <el-button @click="handleReset">Reset</el-button>
-        <el-button @click="handleReset">Reset</el-button>
-        <el-button @click="handleReset">Reset</el-button>
       </el-form-item>
     </el-form>
   </el-card>
 </template>
 
 <script lang="ts">
+// @ts-nocheck
 import Vue from 'vue';
 import {
   Card,
@@ -64,13 +61,13 @@ import {
 } from 'element-ui';
 import 'element-ui/lib/theme-chalk/index.css';
 
-Vue.use(Card);
-Vue.use(Form);
-Vue.use(FormItem);
-Vue.use(Input);
-Vue.use(Select);
-Vue.use(Option);
-Vue.use(Button);
+Vue.component('el-card', Card);
+Vue.component('el-form', Form);
+Vue.component('el-form-item', FormItem);
+Vue.component('el-input', Input);
+Vue.component('el-select', Select);
+Vue.component('el-option', Option);
+Vue.component('el-button', Button);
 
 interface FormData {
   username: string;
@@ -92,9 +89,10 @@ interface Rules {
   region: RuleItem[];
 }
 
+// Vue.extend 写法
 export default Vue.extend({
-  name: 'LoginFormSFC',
-  data(): { loading: boolean; formData: FormData; rules: Rules } {
+  name: 'LoginFormSFCExtend',
+  data() {
     return {
       loading: false,
       formData: {

@@ -293,3 +293,94 @@ export const WARNINGS = {
     'Custom preprocessors for <template> and <style> are not supported in the Codeblock.',
   STYLE_MODULE: '<style module> is not supported in the Codeblock.',
 } as const;
+
+// ============================================================================
+// Error Component Generation (P0 Optimization)
+// ============================================================================
+
+/**
+ * Format compile error with source context
+ * Shows error location and surrounding code lines
+ */
+export function formatCompileError(error: Error | string, source?: string): string {
+  const errorMsg = typeof error === 'string' ? error : error.message;
+
+  // Try to extract line/column info from error message
+  const lineMatch = errorMsg.match(/line\s*(\d+)/i) || errorMsg.match(/:(\d+):/);
+  const columnMatch = errorMsg.match(/column\s*(\d+)/i) || errorMsg.match(/:\d+:(\d+)/);
+
+  const line = lineMatch ? parseInt(lineMatch[1], 10) : undefined;
+  const column = columnMatch ? parseInt(columnMatch[1], 10) : undefined;
+
+  let formattedError = `
+╭──────────────────────────────────────────────────────╮
+│  Vue 2 编译错误 / Compile Error                       │
+├──────────────────────────────────────────────────────┤`;
+
+  if (line) {
+    formattedError += `
+│  位置: 第 ${line} 行${column ? `, 第 ${column} 列` : ''}`;
+  }
+
+  formattedError += `
+├──────────────────────────────────────────────────────┤
+│  ${errorMsg.slice(0, 50)}${errorMsg.length > 50 ? '...' : ''}`;
+
+  // Add source context if available
+  if (source && line) {
+    const lines = source.split('\n');
+    const startLine = Math.max(0, line - 3);
+    const endLine = Math.min(lines.length, line + 2);
+
+    formattedError += `
+├──────────────────────────────────────────────────────┤`;
+
+    for (let i = startLine; i < endLine; i++) {
+      const lineNum = i + 1;
+      const isErrorLine = lineNum === line;
+      const prefix = isErrorLine ? '>>>' : '   ';
+      const lineContent = lines[i]?.slice(0, 45) || '';
+      formattedError += `
+│  ${prefix} ${lineNum.toString().padStart(3, ' ')} │ ${lineContent}`;
+    }
+  }
+
+  formattedError += `
+╰──────────────────────────────────────────────────────╯`;
+
+  return formattedError;
+}
+
+/**
+ * Generate an error component code in ES Module format
+ * This component displays the compile error in a styled box
+ * Used by server-side compilation (node.ts, sfc.ts, jsx.ts)
+ */
+export function createErrorComponentCode(errorMsg: string, source?: string): string {
+  const formattedError = formatCompileError(errorMsg, source);
+  const escapedError = JSON.stringify(formattedError);
+
+  // Generate ES Module format code that dumi's wrapDemoWithFn can process
+  return `
+const ${COMP_IDENTIFIER} = {
+  name: "VueCompileError",
+  render: function(h) {
+    return h("div", {
+      style: {
+        padding: "16px",
+        margin: "8px 0",
+        background: "#fff2f0",
+        border: "1px solid #ffccc7",
+        borderRadius: "6px",
+        fontFamily: "monospace",
+        fontSize: "13px",
+        whiteSpace: "pre-wrap",
+        color: "#cf1322",
+        lineHeight: "1.6"
+      }
+    }, ${escapedError});
+  }
+};
+export default ${COMP_IDENTIFIER};
+`;
+}

@@ -273,6 +273,145 @@ function createCompiler({ babel, availablePresets = {} }: CreateCompilerContext)
 // Lazy-initialized compiler instance
 let _compiler: ReturnType<typeof createCompiler> | null = null;
 
+// ============================================
+// P0 Optimization: Compilation Cache
+// ============================================
+// Simple hash function for cache key generation
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash.toString(36);
+}
+
+// Cache for compiled code (max 100 entries with LRU eviction)
+const compilationCache = new Map<string, { code: string; timestamp: number }>();
+const MAX_CACHE_SIZE = 100;
+
+function getCacheKey(code: string, filename: string): string {
+  return simpleHash(code + filename);
+}
+
+function getFromCache(key: string): string | null {
+  const cached = compilationCache.get(key);
+  if (cached) {
+    // Update timestamp for LRU
+    cached.timestamp = Date.now();
+    return cached.code;
+  }
+  return null;
+}
+
+function setToCache(key: string, code: string): void {
+  // Evict oldest entry if cache is full
+  if (compilationCache.size >= MAX_CACHE_SIZE) {
+    let oldestKey = '';
+    let oldestTime = Infinity;
+    for (const [k, v] of compilationCache.entries()) {
+      if (v.timestamp < oldestTime) {
+        oldestTime = v.timestamp;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey) {
+      compilationCache.delete(oldestKey);
+    }
+  }
+  compilationCache.set(key, { code, timestamp: Date.now() });
+}
+
+// ============================================
+// P0 Optimization: Friendly Error Formatting
+// ============================================
+interface CompileErrorInfo {
+  column?: number;
+  line?: number;
+  message: string;
+  source?: string;
+}
+
+function formatCompileError(error: Error | string, source?: string): string {
+  const errorMsg = typeof error === 'string' ? error : error.message;
+
+  // Try to extract line/column info from error message
+  const lineMatch = errorMsg.match(/line\s*(\d+)/i) || errorMsg.match(/:(\d+):/);
+  const columnMatch = errorMsg.match(/column\s*(\d+)/i) || errorMsg.match(/:\d+:(\d+)/);
+
+  const line = lineMatch ? parseInt(lineMatch[1], 10) : undefined;
+  const column = columnMatch ? parseInt(columnMatch[1], 10) : undefined;
+
+  let formattedError = `
+╭──────────────────────────────────────────────────────╮
+│  Vue 2 编译错误 / Compile Error                       │
+├──────────────────────────────────────────────────────┤`;
+
+  if (line) {
+    formattedError += `
+│  位置: 第 ${line} 行${column ? `, 第 ${column} 列` : ''}`;
+  }
+
+  formattedError += `
+├──────────────────────────────────────────────────────┤
+│  ${errorMsg.slice(0, 50)}${errorMsg.length > 50 ? '...' : ''}`;
+
+  // Add source context if available
+  if (source && line) {
+    const lines = source.split('\n');
+    const startLine = Math.max(0, line - 3);
+    const endLine = Math.min(lines.length, line + 2);
+
+    formattedError += `
+├──────────────────────────────────────────────────────┤`;
+
+    for (let i = startLine; i < endLine; i++) {
+      const lineNum = i + 1;
+      const isErrorLine = lineNum === line;
+      const prefix = isErrorLine ? '>>>' : '   ';
+      const lineContent = lines[i]?.slice(0, 45) || '';
+      formattedError += `
+│  ${prefix} ${lineNum.toString().padStart(3, ' ')} │ ${lineContent}`;
+    }
+  }
+
+  formattedError += `
+╰──────────────────────────────────────────────────────╯`;
+
+  return formattedError;
+}
+
+function createErrorComponent(errorMsg: string, source?: string): string {
+  const formattedError = formatCompileError(errorMsg, source);
+  const escapedError = JSON.stringify(formattedError);
+
+  return `
+"use strict";
+var _errorComponent = {
+  name: "VueCompileError",
+  render: function(h) {
+    return h("div", {
+      style: {
+        padding: "16px",
+        margin: "8px 0",
+        background: "#fff2f0",
+        border: "1px solid #ffccc7",
+        borderRadius: "6px",
+        fontFamily: "monospace",
+        fontSize: "13px",
+        whiteSpace: "pre-wrap",
+        color: "#cf1322",
+        lineHeight: "1.6"
+      }
+    }, ${escapedError});
+  }
+};
+module.exports = _errorComponent;
+module.exports.default = _errorComponent;
+`;
+}
+
 // Wait for Babel to be loaded (max 10 seconds)
 async function waitForBabel(timeout = 10_000): Promise<typeof BabelStandalone> {
   const startTime = Date.now();
@@ -363,10 +502,18 @@ function generateNotSupportedComponent(lang: string): string {
 }
 
 export async function compile(code: string, opts: { filename: string }) {
+  const { filename } = opts;
+
+  // P0 Optimization: Check cache first
+  const cacheKey = getCacheKey(code, filename);
+  const cachedResult = getFromCache(cacheKey);
+  if (cachedResult) {
+    return cachedResult;
+  }
+
   // Top-level try-catch to ensure all errors are caught and converted to error components
   // This allows dumi's Live Editing to recover when the user fixes the code
   try {
-    const { filename } = opts;
     const { lang } = safeResolveFilename(filename);
 
     const id = generateComponentId(filename);
@@ -379,8 +526,8 @@ export async function compile(code: string, opts: { filename: string }) {
         const compiled = await comp.compileSFC({ code, filename, id });
 
         if (Array.isArray(compiled)) {
-          const errorMsg = compiled.map((e) => e.toString()).join('\\n');
-          return `throw new Error(${JSON.stringify(errorMsg)});`;
+          // Follow preset-vue pattern: throw error so dumi's LiveDemo can catch and display it
+          throw compiled[0];
         }
 
         let { css, js } = compiled;
@@ -401,11 +548,12 @@ export async function compile(code: string, opts: { filename: string }) {
         cjsCode = cjsCode.replace(/_vue\["default"]\.extend\({/g, '({');
         cjsCode = cjsCode.replace(/_vue\.default\.extend\({/g, '({');
 
+        // P0 Optimization: Cache successful compilation
+        setToCache(cacheKey, cjsCode);
         return cjsCode;
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error('[Vue2 Compiler] SFC compile error:', errorMsg);
-        return `throw new Error(${JSON.stringify(errorMsg)});`;
+        // Follow preset-vue pattern: re-throw error so dumi's LiveDemo can catch and display it
+        throw error;
       }
     }
 
@@ -448,19 +596,19 @@ export async function compile(code: string, opts: { filename: string }) {
         cjsCode = cjsCode.replace(/_vue\["default"]\.extend\({/g, '({');
         cjsCode = cjsCode.replace(/_vue\.default\.extend\({/g, '({');
 
+        // P0 Optimization: Cache successful compilation
+        setToCache(cacheKey, cjsCode);
         return cjsCode;
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        return `throw new Error(${JSON.stringify(errorMsg)});`;
+        // Follow preset-vue pattern: re-throw error so dumi's LiveDemo can catch and display it
+        throw error;
       }
     }
 
     return generateNotSupportedComponent(lang || 'unknown');
   } catch (error) {
-    // Catch any unexpected errors (e.g., from getCompilerAsync, safeResolveFilename)
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error('[Vue2 Compiler] Unexpected error:', errorMsg);
-    return `throw new Error(${JSON.stringify('[Vue2 Compiler] ' + errorMsg)});`;
+    // Follow preset-vue pattern: re-throw error so dumi's LiveDemo can catch and display it
+    throw error;
   }
 }
 

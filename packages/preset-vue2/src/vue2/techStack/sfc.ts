@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { compile, compiler } from '@/compiler/node';
+import { createErrorComponentCode } from '@/compiler/shared';
 
 interface Vue2SfcTechStackOptions {
   /** Additional modules to include in live editing context */
@@ -101,9 +102,19 @@ export const Vue2SfcTechStack = ({
         const id = hashId(raw);
 
         const js = compile({ code: raw, filename, id });
+
+        // P0 Optimization: Generate error component instead of returning empty string
         if (Array.isArray(js)) {
-          logger.error(js);
-          return '';
+          const errorMsg = js.map((e) => e.message || String(e)).join('\n');
+          logger.error('[Vue2 SFC Compile Error]', errorMsg);
+          const errorCode = createErrorComponentCode(errorMsg, raw);
+          const code = wrapDemoWithFn(errorCode, {
+            filename,
+            parserConfig: {
+              syntax: 'ecmascript',
+            },
+          });
+          return `(${code})()`;
         }
 
         const code = wrapDemoWithFn(js, {
