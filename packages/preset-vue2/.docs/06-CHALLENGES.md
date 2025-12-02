@@ -112,6 +112,52 @@ export default {
 };
 ```
 
+### 2.5 关键 Bug 修复：绝对路径 vs 相对路径
+
+**问题场景**：
+
+当项目文件夹名称与 `jsxIncludes` 配置的模式匹配时，会导致所有文件都被错误匹配：
+
+```
+项目路径: /Users/dev/projects/vue2/
+配置: jsxIncludes: ['/vue2/', '/components/']
+
+文件路径: /Users/dev/projects/vue2/docs/react-demos/ReactCounter.tsx
+           ^^^^^^^^^^^^^^^^^^^^^^^
+           包含 '/vue2/' → 被错误地识别为 Vue 组件！
+```
+
+**根本原因**：
+
+```typescript
+// 错误实现：使用绝对路径匹配
+function matchJsxIncludes(filePath: string, patterns: string[]): boolean {
+  return patterns.some((p) => filePath.includes(p)); // ❌ 绝对路径包含项目文件夹名
+}
+```
+
+**正确实现**：
+
+```typescript
+// 正确实现：转换为相对路径后再匹配
+function matchJsxIncludes(filePath: string, patterns: string[], cwd: string): boolean {
+  // 转换为相对于项目根目录的路径
+  let pathToMatch = filePath;
+  if (cwd && path.isAbsolute(filePath)) {
+    pathToMatch = '/' + path.relative(cwd, filePath).split(path.sep).join('/');
+  }
+  // 现在匹配的是 /docs/react-demos/ReactCounter.tsx
+  // 不再包含项目文件夹名 '/vue2/'
+  return patterns.some((p) => pathToMatch.includes(p));
+}
+```
+
+**教训**：
+
+- 路径匹配时务必考虑绝对路径 vs 相对路径
+- 项目文件夹名称可能与配置模式冲突
+- 始终使用相对路径进行模式匹配
+
 ## 3. 难点二：PropType<T> 泛型提取
 
 ### 3.1 问题描述

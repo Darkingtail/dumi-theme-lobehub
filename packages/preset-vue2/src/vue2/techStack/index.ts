@@ -89,6 +89,7 @@ export default function registerTechStack(api: IApi) {
   api.register({
     fn: () =>
       Vue2JSXTechStack({
+        cwd: api.cwd,
         jsxIncludes: vue2Config?.jsxIncludes,
         resolveMap: vue2Config?.resolveMap,
         runtimeOpts,

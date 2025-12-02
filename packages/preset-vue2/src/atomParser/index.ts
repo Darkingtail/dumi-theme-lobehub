@@ -169,12 +169,15 @@ export class Vue2AtomAssetsParser extends BaseAtomAssetsParser<Vue2MetaParser> {
     super({
       entryFile: opts.entryFile,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-handleWatcher: (watcher: any, { parse, patch }: any) => {
+      handleWatcher: (watcher: any, { parse, patch }: any) => {
         watcher.on('all', (event: string, filePath: string) => {
           // Only handle Vue component files
+          // Use path separator check to avoid false positives with folder names
+          const isNodeModules =
+            filePath.includes('/node_modules/') || filePath.includes('\\node_modules\\');
           if (
             /\.(vue|tsx?|jsx?)$/.test(filePath) &&
-            !filePath.includes('node_modules') &&
+            !isNodeModules &&
             !filePath.endsWith('.d.ts')
           ) {
             patch({
@@ -186,9 +189,9 @@ handleWatcher: (watcher: any, { parse, patch }: any) => {
         });
         return watcher;
       },
-      
-parser,
-      
+
+      parser,
+
       resolveDir: opts.resolveDir,
       watchOptions: {
         ignored: ['**/node_modules/**', '**/dist/**', '**/*.d.ts', '**/demo/**', '**/demos/**'],
@@ -208,4 +211,9 @@ export function createVue2AtomParser(opts: Vue2MetaParserOptions) {
 // Export types
 
 export { transformComponentDoc } from './transformer';
-export {type IAtomAssetsParserResult, type ILanguageMetaParser, type IPatchFile, type Vue2MetaParserOptions} from './types';
+export {
+  type IAtomAssetsParserResult,
+  type ILanguageMetaParser,
+  type IPatchFile,
+  type Vue2MetaParserOptions,
+} from './types';

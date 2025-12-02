@@ -10,6 +10,8 @@ import { createErrorComponentCode } from '@/compiler/shared';
 import type { JsxIncludesConfig } from '@/shared';
 
 interface Vue2JSXTechStackOptions {
+  /** Current working directory for resolving relative paths */
+  cwd: string;
   jsxIncludes?: JsxIncludesConfig;
   /** Additional modules to include in live editing context */
   resolveMap?: string[];
@@ -18,21 +20,35 @@ interface Vue2JSXTechStackOptions {
 
 /**
  * Check if a file path matches the jsxIncludes config
- * @param filePath - The file path to check
+ * @param filePath - The file path to check (can be absolute or relative)
  * @param config - The jsxIncludes config
+ * @param cwd - Current working directory for resolving relative paths
  * @returns true if the path matches, false otherwise
  */
-function matchJsxIncludes(filePath: string, config: JsxIncludesConfig | undefined): boolean {
+function matchJsxIncludes(
+  filePath: string,
+  config: JsxIncludesConfig | undefined,
+  cwd?: string,
+): boolean {
   // Default: match all jsx/tsx files
   if (config === undefined || config === true) {
     return true;
   }
 
+  // Use relative path if cwd is provided and filePath is absolute
+  // This prevents false positives when project folder name matches pattern
+  let pathToMatch = filePath;
+  if (cwd && path.isAbsolute(filePath)) {
+    pathToMatch = path.relative(cwd, filePath);
+    // Ensure forward slashes for consistent matching
+    pathToMatch = '/' + pathToMatch.split(path.sep).join('/');
+  }
+
   // Check if path matches any pattern
   for (const pattern of config) {
-    if (typeof pattern === 'string' && filePath.includes(pattern)) {
+    if (typeof pattern === 'string' && pathToMatch.includes(pattern)) {
       return true;
-    } else if (pattern instanceof RegExp && pattern.test(filePath)) {
+    } else if (pattern instanceof RegExp && pattern.test(pathToMatch)) {
       return true;
     }
   }
@@ -84,6 +100,7 @@ function looksLikeReactCode(code: string): boolean {
 }
 
 export const Vue2JSXTechStack = ({
+  cwd,
   runtimeOpts,
   jsxIncludes,
   resolveMap: userResolveMap,
@@ -172,7 +189,7 @@ export const Vue2JSXTechStack = ({
 
       if (filePath) {
         // File path available - filter based on jsxIncludes config
-        return matchJsxIncludes(filePath, jsxIncludes);
+        return matchJsxIncludes(filePath, jsxIncludes, cwd);
       }
 
       // File path not available (might be inline code or node structure issue)
@@ -193,7 +210,7 @@ export const Vue2JSXTechStack = ({
 
       // Check if file path matches jsxIncludes config
       const filePath = args.path || args.filename;
-      if (!matchJsxIncludes(filePath, jsxIncludes)) {
+      if (!matchJsxIncludes(filePath, jsxIncludes, cwd)) {
         return null; // Let other tech stacks handle this file
       }
 
@@ -213,7 +230,7 @@ export const Vue2JSXTechStack = ({
         const filename = opts.fileAbsPath;
 
         // Check if file path matches jsxIncludes config
-        if (!matchJsxIncludes(filename, jsxIncludes)) {
+        if (!matchJsxIncludes(filename, jsxIncludes, cwd)) {
           return raw; // Return unchanged, let other tech stacks handle it
         }
 
