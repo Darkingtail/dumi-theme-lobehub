@@ -17,7 +17,7 @@
   ],
   "scripts": {
     "build": "father build && tsup --minify && npm run build:copy-compiled",
-    "build:copy-compiled": "mkdir -p dist/compiled && cp -r compiled/* dist/compiled/",
+    "build:copy-compiled": "node scripts/copy-compiled.js",
     "build:lib": "tsup --minify",
     "dev": "father dev",
     "test": "vitest"
