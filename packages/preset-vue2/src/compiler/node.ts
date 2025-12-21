@@ -1,4 +1,5 @@
 import { babelCore, babelPresetEnv, babelPresetTypeScript } from 'dumi/tech-stack-utils';
+import { babelPluginTransformVueJsx } from 'vue2-jsx-browser';
 
 import { COMP_IDENTIFIER, type CompileOptions, createCompiler } from './index';
 
@@ -8,10 +9,9 @@ const typescript = babelPresetTypeScript();
 
 export const compiler: ReturnType<typeof createCompiler> = createCompiler({
   availablePlugins: {
-    // Use custom fixed JSX plugin instead of official one
+    // Use fixed JSX plugin from vue2-jsx-browser package
     // The official @vue/babel-plugin-transform-vue-jsx has a bug with on:click syntax
-    // See: compiled/vue2-jsx-plugin.js for details
-    'vue2-jsx-fixed': require.resolve('../compiled/vue2-jsx-plugin'),
+    'vue2-jsx-fixed': babelPluginTransformVueJsx,
   },
   availablePresets: {
     env,

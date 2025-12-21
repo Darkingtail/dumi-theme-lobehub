@@ -16,8 +16,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "father build && tsup --minify && npm run build:copy-compiled",
-    "build:copy-compiled": "node scripts/copy-compiled.js",
+    "build": "father build && tsup --minify",
     "build:lib": "tsup --minify",
     "dev": "father dev",
     "test": "vitest"
@@ -39,7 +38,8 @@
     "sass": "^1.80.0",
     "svg-tags": "^1.0.0",
     "vue-docgen-api": "^4.79.2",
-    "vue-loader": "^15.11.1"
+    "vue-loader": "^15.11.1",
+    "vue2-jsx-browser": "workspace:*"
   },
   "devDependencies": {
     "@babel/preset-typescript": "^7.28.5",

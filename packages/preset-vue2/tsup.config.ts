@@ -21,15 +21,13 @@ export default defineConfig([
     ...browserBase,
     entry: { compiler: 'src/compiler/browser.ts' },
     // Bundle Vue 3's @vue/compiler-sfc browser version for <script setup> support
-// Also bundle Vue JSX plugins for TSX/JSX Live Editing support
-// The esm-browser.js is automatically selected due to the "import" export condition
-esbuildOptions(options) {
+    // Also bundle Vue JSX plugins for TSX/JSX Live Editing support
+    // The esm-browser.js is automatically selected due to the "import" export condition
+    esbuildOptions(options) {
       options.conditions = ['import', 'browser'];
       options.mainFields = ['module', 'browser', 'main'];
     },
-    
-    
-    
+
     name: 'compiler',
     noExternal: [
       // Vue compiler dependencies
@@ -40,7 +38,8 @@ esbuildOptions(options) {
       /@babel\/parser/,
       /estree-walker/,
       /source-map-js/,
-      // Vue JSX plugins for browser bundling
+      // Vue 2 JSX browser bundle (fixed plugin + sugar plugins)
+      /vue2-jsx-browser/,
       /@vue\/babel-plugin-transform-vue-jsx/,
       /@vue\/babel-sugar-functional-vue/,
       /@vue\/babel-sugar-v-model/,
@@ -49,7 +48,7 @@ esbuildOptions(options) {
       /@babel\/plugin-syntax-jsx/,
       /@babel\/helper-plugin-utils/,
       /@babel\/helper-module-imports/,
-      /lodash\.kebabcase/,
+      /lodash.kebabcase/,
       /html-tags/,
       /svg-tags/,
     ],

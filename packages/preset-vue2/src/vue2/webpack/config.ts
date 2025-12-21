@@ -1,6 +1,7 @@
 import type Config from '@umijs/bundler-webpack/compiled/webpack-5-chain';
 import type { IApi } from 'dumi';
 import path from 'node:path';
+import { babelPluginTransformVueJsx } from 'vue2-jsx-browser';
 import VueLoaderPlugin from 'vue-loader/lib/plugin';
 
 // Webpack configuration for Vue 2
@@ -36,7 +37,7 @@ export function getConfig(config: Config, api: IApi) {
         require.resolve('@vue/babel-sugar-functional-vue'),
         require.resolve('@vue/babel-sugar-v-model'),
         require.resolve('@vue/babel-sugar-v-on'),
-        require.resolve('../../compiled/vue2-jsx-plugin'), // Custom fixed plugin (auto-injects h)
+        babelPluginTransformVueJsx, // Custom fixed plugin (auto-injects h)
       ],
 
       // Don't inherit umi's presets - they may include React JSX transform
