@@ -1,5 +1,9 @@
 import { copyFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'tsup';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   clean: true,
@@ -7,19 +11,24 @@ export default defineConfig({
   entry: {
     index: 'src/index.ts',
   },
-  // Shim Node.js built-ins for browser
-esbuildOptions(options) {
+  esbuildOptions(options) {
     options.define = {
       'process.env.NODE_ENV': '"production"',
     };
+    // Replace Node.js 'assert' with our CommonJS shim
+    // Using .cjs file ensures it's treated as CommonJS and exports a callable function
+    options.alias = {
+      assert: resolve(__dirname, 'src/assert-shim.cjs'),
+    };
   },
-  
-external: ['@babel/core'],
-  
-format: ['esm', 'cjs'],
-  
-// Bundle all dependencies for browser use
-noExternal: [
+
+  // Keep @babel/core external, but bundle everything else
+  external: ['@babel/core'],
+
+  format: ['esm', 'cjs'],
+
+  // Bundle all dependencies
+  noExternal: [
     /@vue\/babel-sugar-functional-vue/,
     /@vue\/babel-sugar-v-model/,
     /@vue\/babel-sugar-v-on/,
@@ -31,21 +40,17 @@ noExternal: [
     /html-tags/,
     /svg-tags/,
   ],
-  
 
-onSuccess: async () => {
+  onSuccess: async () => {
     // Copy handwritten .d.ts to dist
     copyFileSync('src/index.d.ts', 'dist/index.d.ts');
   },
-  
 
-platform: 'browser',
-  
-  
+  // Use 'neutral' platform for universal compatibility
+  // The assert module is aliased to our browser-compatible shim
+  platform: 'neutral',
 
-sourcemap: true,
-  
-  
-splitting: false,
+  sourcemap: true,
+  splitting: false,
   treeshake: true,
 });
