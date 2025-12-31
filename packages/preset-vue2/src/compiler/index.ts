@@ -202,13 +202,10 @@ export function createCompiler({
     const { id, code, filename } = options;
 
     // Vue 3's parse returns { descriptor, errors }
-    const parseResult = parse(code, {
+    const { descriptor, errors: parseErrors } = parse(code, {
       filename,
       sourceMap: false,
     });
-
-    const descriptor = parseResult.descriptor;
-    const parseErrors = parseResult.errors;
 
     if (parseErrors && parseErrors.length) {
       return (parseErrors as unknown[]).map(toError);

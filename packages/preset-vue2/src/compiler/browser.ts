@@ -1,7 +1,18 @@
 /**
  * Browser-compatible Vue 2.7 SFC Compiler
- * Uses @vue/compiler-sfc (Vue 3) for parsing
+ * Uses @vue/compiler-sfc (Vue 3) for parsing and script setup support
  * Supports TSX/JSX Live Editing with bundled Vue JSX plugins
+ *
+ * Note: Vue 3's compiler-sfc is used because:
+ * - Vue 2.7's compiler-sfc doesn't support browser environment
+ * - We need <script setup> support for Vue 3 migration path
+ *
+ * Trade-offs:
+ * - Filters ({{ x | fn }}) won't work correctly
+ * - .sync modifier won't work correctly
+ * - .native modifier won't work correctly
+ * These are Vue 2 features removed in Vue 3, so not supporting them
+ * actually helps enforce Vue 3 compatible code.
  */
 /* global Babel, Sass */
 import type BabelStandalone from '@babel/standalone';
@@ -206,13 +217,11 @@ function createCompiler({ babel, availablePresets = {} }: CreateCompilerContext)
   async function compileSFC(options: CompileOptions): Promise<CompileResult> {
     const { id, code, filename } = options;
 
-    const parseResult = parse(code, {
+    // Vue 3's parse returns { descriptor, errors }
+    const { descriptor, errors: parseErrors } = parse(code, {
       filename,
       sourceMap: false,
     });
-
-    const descriptor = parseResult.descriptor;
-    const parseErrors = parseResult.errors;
 
     if (parseErrors && parseErrors.length) {
       return (parseErrors as unknown[]).map(toError);

@@ -169,7 +169,7 @@ export function compileStyles(
     });
 
     if (result.errors && result.errors.length) {
-      return result.errors.map((e) => (e instanceof Error ? e : new Error(String(e))));
+      return result.errors.map((e: unknown) => (e instanceof Error ? e : new Error(String(e))));
     }
 
     styleList.push(result.code);
@@ -211,7 +211,7 @@ export async function compileStylesAsync(
     });
 
     if (result.errors && result.errors.length) {
-      return result.errors.map((e) => (e instanceof Error ? e : new Error(String(e))));
+      return result.errors.map((e: unknown) => (e instanceof Error ? e : new Error(String(e))));
     }
 
     styleList.push(result.code);
